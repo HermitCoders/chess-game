@@ -23,8 +23,6 @@ class GameFrame(QFrame):
 
         self.setStyleSheet("background-color: #262626")
 
-        self.user_is_white = True
-
         self.board = ChessBoard(self)
 
         game_widget = QWidget()
@@ -32,6 +30,8 @@ class GameFrame(QFrame):
         game_layout.setContentsMargins(0, 0, 0, 0)
         game_layout.setSpacing(30)
         game_layout.addWidget(self.board, 8)
+        # self.setLayout(game_layout)
+        
         game_widget.setLayout(game_layout)
 
         vbox_widget = QWidget()
