@@ -12,12 +12,13 @@ class Config:
         self._add_themes()
         self.idx = 0
         self.theme = self.themes[self.idx]
-        self.screen_dimensions = (840, 800)
+        self.screen_dimensions = (1200, 800)
         self.board_dimensions = (800, 800)
         self.square_size = self.board_dimensions[0] // 8
         self.font = pygame.font.SysFont("arial", self.square_size // 4, bold=True)
         self.small_font = pygame.font.SysFont("arial", self.square_size // 6, bold=True)
-        self.evaluation_bar_dimensions = (40, 800)
+        self.evaluation_bar_dimensions = (30, 800)
+        self.freespace_dimensions = (370, 800)
 
         # self.move_sound = Sound(
         #     os.path.join('assets/sounds/move.wav'))
