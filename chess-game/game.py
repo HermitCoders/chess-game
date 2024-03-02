@@ -21,22 +21,20 @@ class GameFrame(QFrame):
 
         self.parent = parent
 
-        self.setStyleSheet("background-color: #262626")
+        self.setStyleSheet('background-color: #262626')
 
         self.board = ChessBoard(self)
-
+        
         game_widget = QWidget()
         game_layout = QHBoxLayout()
         game_layout.setContentsMargins(0, 0, 0, 0)
-        game_layout.setSpacing(30)
-        game_layout.addWidget(self.board, 8)
-        # self.setLayout(game_layout)
-        
+        game_layout.setSpacing(0)
+        game_layout.addWidget(self.board, 1)
         game_widget.setLayout(game_layout)
 
         vbox_widget = QWidget()
         vbox_layout = QVBoxLayout()
-        vbox_layout.addWidget(game_widget, 16)
+        vbox_layout.addWidget(game_widget, 1)
         vbox_widget.setLayout(vbox_layout)
 
         self.setLayout(vbox_layout)
