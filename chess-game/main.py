@@ -19,12 +19,12 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(0)
 
         self.setCentralWidget(self.stack)
-        self.setWindowTitle('Chess')
+        self.setWindowTitle("Chess")
         self.setMinimumSize(820, 820)
         self.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     window = MainWindow()

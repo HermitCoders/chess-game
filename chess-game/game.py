@@ -11,8 +11,11 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 from PyQt6.QtGui import QPalette, QColor
+from PyQt6.QtCore import Qt, QRect
 
 from board import ChessBoard
+from piece import PieceItem
+import chess
 
 
 class GameFrame(QFrame):
@@ -21,10 +24,10 @@ class GameFrame(QFrame):
 
         self.parent = parent
 
-        self.setStyleSheet('background-color: #262626')
+        self.setStyleSheet("background-color: #262626")
 
         self.board = ChessBoard(self)
-        
+
         game_widget = QWidget()
         game_layout = QHBoxLayout()
         game_layout.setContentsMargins(0, 0, 0, 0)
@@ -38,3 +41,27 @@ class GameFrame(QFrame):
         vbox_widget.setLayout(vbox_layout)
 
         self.setLayout(vbox_layout)
+
+    def mousePressEvent(self, event):
+        global_pos = self.mapToGlobal(event.pos())
+
+        rect = QRect(
+            self.board.mapToGlobal(self.board.rect().topLeft()), self.board.size()
+        )
+        if rect.contains(global_pos):
+            # The mouse click is within the frame's visible area
+            local_pos = self.board.mapFromGlobal(global_pos)
+            square_index = self.board.mouse_position_to_square_index(local_pos)
+
+            if event.buttons() == Qt.MouseButton.RightButton:
+                self.board.unframe_all()
+                self.board.set_square_style(square_index, "highlight")
+
+            elif event.buttons() == Qt.MouseButton.LeftButton:
+                self.board.unhighlight_all()
+                self.board.draw_possible_moves(square_index)
+                self.board.move_piece(square_index)
+
+            self.board.previous_sq_idx = square_index
+        else:
+            print("Mouse click is outside the frame's visible area")
