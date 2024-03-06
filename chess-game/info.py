@@ -75,16 +75,19 @@ class MovesRecord(QScrollArea):
             ) + chess.SQUARE_NAMES[last_move.to_square]
 
             if move_type == ChessMoves.capture:
-                if piece_symbol == "P":
+                if piece_symbol == "P" or last_move.promotion:
                     san_move = (
                         chess.SQUARE_NAMES[last_move.from_square][:1]
                         + move_type
                         + san_move
                     )
                 else:
-                    san_move = san_move[:1] + "x" + san_move[1:]
+                    san_move = san_move[:1] + move_type + san_move[1:]
             elif move_type in [ChessMoves.short_castle, ChessMoves.long_castle]:
                 san_move = move_type
+
+            if last_move.promotion:
+                san_move += "=Q"
 
             if self.parent.board.board.is_checkmate():
                 san_move += "#"
