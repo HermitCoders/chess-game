@@ -135,7 +135,7 @@ class EvaluationBar(QWidget):
     def set_evaluation(self, evaluation):
         self.evaluation = evaluation
         self.update()  # Trigger a repaint
-        
+
     def set_mate(self, mate):
         self.mate = mate
         self.update()  # Trigger a repaint
@@ -168,3 +168,35 @@ class EvaluationBar(QWidget):
         # Draw the black and white sections
         painter.fillRect(white_rect, Qt.GlobalColor.white)
         painter.fillRect(black_rect, Qt.GlobalColor.black)
+
+        painter.setFont(QFont("Bahnschrift", 12))
+
+        if bar_height >= 0.5:
+            painter.setPen(QColor("black"))
+            text_pos = (
+                0,
+                rect.height() - int(1.5 * painter.fontMetrics().height()),
+                rect.width(),
+                painter.fontMetrics().height(),
+            )
+        else:
+            painter.setPen(QColor("white"))
+            text_pos = (
+                0,
+                int(0.5 * painter.fontMetrics().height()),
+                rect.width(),
+                painter.fontMetrics().height(),
+            )
+
+        # Draw the evaluation text
+        if self.evaluation is not None:
+            text = f"{abs(self.evaluation):.1f}"
+        elif self.mate is not None:
+            text = f"M{abs(self.mate)}"
+
+        text_rect = QRect(*text_pos)
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter,
+            text,
+        )
