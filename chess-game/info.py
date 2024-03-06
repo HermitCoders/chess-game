@@ -18,8 +18,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont
 from PyQt6.QtCore import Qt, QRegularExpression, QRect, QCoreApplication
 from board import ChessMoves
-from utils import sigmoid
+from utils import sigmoid, sign
 import chess
+import chess.engine
 
 
 class MovesRecord(QScrollArea):
@@ -129,20 +130,34 @@ class EvaluationBar(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.evaluation = 0
+        self.mate = None
 
     def set_evaluation(self, evaluation):
         self.evaluation = evaluation
         self.update()  # Trigger a repaint
+        
+    def set_mate(self, mate):
+        self.mate = mate
+        self.update()  # Trigger a repaint
 
-    def update_engine_evaluation(self, centipawns):
-        evaluation = centipawns / 100
-        self.set_evaluation(evaluation)
+    def update_engine_evaluation(self, score: chess.engine.Score):
+        if score.score() is not None:
+            evaluation = score.score() / 100
+            self.evaluation = evaluation
+            self.mate = None
+        elif score.mate() != 0:
+            self.evaluation = None
+            self.mate = score.mate()
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        bar_height = sigmoid(self.evaluation)
+        if self.mate:
+            bar_height = int(self.mate > 0)
+        else:
+            bar_height = sigmoid(self.evaluation)
 
         rect = self.rect()
         white_height = int(rect.height() * (bar_height))
