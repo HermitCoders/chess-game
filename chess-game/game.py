@@ -74,7 +74,7 @@ class GameFrame(QFrame):
             self.board.previous_sq_idx = square_index
         else:
             print("Mouse click is outside the frame's visible area")
-        self.evaluation_bar.update_engine_evaluation(self.evaluation())
+        # self.evaluation_bar.update_engine_evaluation(self.evaluation())
 
     # def mouseReleaseEvent(self, event: QMouseEvent):
     #     self.moves_record.update_moves()

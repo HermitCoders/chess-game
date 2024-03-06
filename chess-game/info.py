@@ -13,12 +13,13 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QHeaderView,
-    QProgressBar
+    QProgressBar,
 )
 from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont
 from PyQt6.QtCore import Qt, QRegularExpression, QRect, QCoreApplication
+from board import ChessMoves
+from utils import sigmoid
 import chess
-import math
 
 
 class MovesRecord(QScrollArea):
@@ -36,7 +37,7 @@ class MovesRecord(QScrollArea):
         self.setFixedSize(300, 800)
 
         self.setFrameShape(QFrame.Shape.NoFrame)
-        
+
         self.vbar = self.verticalScrollBar()
         self.vbar.setValue(self.vbar.maximum())
 
@@ -45,9 +46,15 @@ class MovesRecord(QScrollArea):
         self.table_widget.setColumnCount(3)
         self.table_widget.verticalHeader().setVisible(False)
         self.table_widget.horizontalHeader().setVisible(False)
-        self.table_widget.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_widget.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table_widget.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table_widget.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.table_widget.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.table_widget.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
 
         vbox_layout = QVBoxLayout()
         vbox_layout.addWidget(self.table_widget)
@@ -61,22 +68,29 @@ class MovesRecord(QScrollArea):
             last_move = self.parent.board.board.peek()
             moved_piece = self.parent.board.pieces_items[last_move.to_square]
             piece_symbol = str.upper(moved_piece.piece.symbol())
+            move_type = self.parent.board.move_type
 
-            san_move = (
+            san_move: str = (
                 "" if piece_symbol == "P" or last_move.promotion else piece_symbol
             ) + chess.SQUARE_NAMES[last_move.to_square]
 
-            if self.parent.board.capture:
+            if move_type == ChessMoves.capture:
                 if piece_symbol == "P":
-                    san_move = chess.SQUARE_NAMES[last_move.from_square][:1] + "x" + san_move
+                    san_move = (
+                        chess.SQUARE_NAMES[last_move.from_square][:1]
+                        + move_type
+                        + san_move
+                    )
                 else:
                     san_move = san_move[:1] + "x" + san_move[1:]
+            elif move_type in [ChessMoves.short_castle, ChessMoves.long_castle]:
+                san_move = move_type
 
             if self.parent.board.board.is_checkmate():
                 san_move += "#"
             elif self.parent.board.board.is_check():
                 san_move += "+"
-                
+
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
 
@@ -88,12 +102,16 @@ class MovesRecord(QScrollArea):
             move_num = (idx // 2) + 1
             self.table_widget.setRowCount(move_num)
 
-            move_num_item = QTableWidgetItem(str(move_num) + '.')
-            move_num_item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            move_num_item = QTableWidgetItem(str(move_num) + ".")
+            move_num_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+            )
             self.table_widget.setItem(idx // 2, 0, move_num_item)
 
             move_item = QTableWidgetItem(move)
-            move_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            move_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             self.table_widget.setItem(idx // 2, 1 if idx % 2 == 0 else 2, move_item)
 
             move_num_item.setForeground(QColor("#f6f6f6"))
@@ -108,14 +126,11 @@ class EvaluationBar(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.evaluation = 0
-        
-    def sigmoid(self, x):
-        return 1 / (1 + math.exp(-0.3*x))
 
     def set_evaluation(self, evaluation):
         self.evaluation = evaluation
         self.update()  # Trigger a repaint
-        
+
     def update_engine_evaluation(self, centipawns):
         evaluation = centipawns / 100
         self.set_evaluation(evaluation)
@@ -123,8 +138,8 @@ class EvaluationBar(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        bar_height = self.sigmoid(self.evaluation)
+
+        bar_height = sigmoid(self.evaluation)
 
         rect = self.rect()
         white_height = int(rect.height() * (bar_height))

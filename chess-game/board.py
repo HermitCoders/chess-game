@@ -15,8 +15,19 @@ from PyQt6.QtCore import Qt, QRegularExpression, QRect
 import chess
 from piece import PieceItem
 from collections import defaultdict
+from enum import Enum
+from utils import sign
 
 sq_size = 100
+
+
+class ChessMoves(str, Enum):
+    capture = "x"
+    short_castle = "O-O"
+    long_castle = "O-O-O"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class ChessBoard(QFrame):
@@ -24,7 +35,7 @@ class ChessBoard(QFrame):
         super().__init__(parent)
 
         self.sq_size = sq_size
-        # self.board = chess.Board("5k2/1P6/8/8/8/8/8/1K6 w - - 0 1")
+        # self.board = chess.Board("rnbqkbnr/pp1p1ppp/8/2pPp3/8/8/PPP1PPPP/RNBQKBNR w KQkq c6 0 1")
         self.board = chess.Board()
 
         self.square_colors = {"light": "#e6e6e6", "dark": "#a6a6a6"}
@@ -34,11 +45,14 @@ class ChessBoard(QFrame):
 
         self.highlighted_squares = set()
         self.framed_squares = set()
+
         self.previous_sq_idx = None
+
         self.possible_moves = None
         self.possible_promotions = None
+
         self.move_made = False
-        self.capture = False
+        self.move_type: ChessMoves = None
 
         self.pieces_items = {}
 
@@ -153,7 +167,7 @@ class ChessBoard(QFrame):
             self.update_board(last_move)
         else:
             self.move_made = False
-            self.capture = False
+            self.move_type = None
 
     def remove_piece_item(self, square_index):
         piece = self.pieces_items[square_index]
@@ -179,8 +193,16 @@ class ChessBoard(QFrame):
 
         # Capture
         if target_square_index in self.pieces_items.keys():
+            # Ordinary
             self.remove_piece_item(target_square_index)
-            self.capture = True
+            self.move_type = ChessMoves.capture
+        
+        elif (self.pieces_items[source_square_index].objectName() == "p" 
+              and abs(source_square_index - target_square_index) in [7, 9]):
+            # En passant
+            sgn = sign((target_square_index - source_square_index))
+            self.remove_piece_item(target_square_index - sgn * 8)
+            self.move_type = ChessMoves.capture
 
         # Promotion
         if move.promotion:
@@ -199,18 +221,25 @@ class ChessBoard(QFrame):
             if uci_string == "e1g1":  # White short
                 rook_source_sq_idx = 7
                 rook_target_sq_idx = 5
-
+                self.move_type = ChessMoves.short_castle
             elif uci_string == "e1c1":  # White long
                 rook_source_sq_idx = 0
                 rook_target_sq_idx = 3
-
+                self.long_castle = True
+                self.move_type = ChessMoves.long_castle
             elif uci_string == "e8g8":  # Black short
                 rook_source_sq_idx = 63
                 rook_target_sq_idx = 61
-
+                self.short_castle = True
+                self.move_type = ChessMoves.short_castle
             elif uci_string == "e8c8":  # Black long
                 rook_source_sq_idx = 56
                 rook_target_sq_idx = 59
+                self.long_castle = True
+                self.move_type = ChessMoves.long_castle
+
             self.move_piece_item(rook_source_sq_idx, rook_target_sq_idx)
+            self.move_piece_item(source_square_index, target_square_index)
+        
         else:
             self.move_piece_item(source_square_index, target_square_index)

@@ -10,7 +10,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super(MainWindow, self).__init__()
-        
+
         engine = chess.engine.SimpleEngine.popen_uci(
             "stockfish/stockfish-windows-x86-64-avx2.exe"
         )
@@ -27,7 +27,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Chess")
         self.setMinimumSize(820, 820)
         self.show()
-    
+
     def closeEvent(self, event: QCloseEvent):
         self.game_frame.engine.quit()
 
