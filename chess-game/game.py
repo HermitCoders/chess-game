@@ -21,7 +21,7 @@ import chess.engine
 
 class GameFrame(QFrame):
     def __init__(self, parent, engine):
-        super().__init__()
+        super().__init__(parent)
 
         self.parent = parent
         self.engine = engine
@@ -30,24 +30,31 @@ class GameFrame(QFrame):
 
         self.evaluation_bar = EvaluationBar(self)
         self.evaluation_bar.setFixedSize(30, 800)
-        self.board = ChessBoard(self)
-        self.moves_record = MovesRecord(self)
 
-        game_widget = QWidget()
+        self.board = ChessBoard(self)
+        self.board.setFixedSize(800, 800)
+
+        self.moves_record = MovesRecord(self)
+        self.moves_record.setFixedSize(300, 800)
+
+        # Game layout
         game_layout = QHBoxLayout()
         game_layout.setContentsMargins(0, 0, 0, 0)
         game_layout.setSpacing(10)
-        game_layout.addWidget(self.evaluation_bar, 1)
-        game_layout.addWidget(self.board, 1)
-        game_layout.addWidget(self.moves_record, 1)
+        game_layout.addWidget(self.evaluation_bar)
+        game_layout.addWidget(self.board)
+        game_layout.addWidget(self.moves_record)
+
+        game_widget = QWidget()
         game_widget.setLayout(game_layout)
 
-        vbox_widget = QWidget()
-        vbox_layout = QVBoxLayout()
-        vbox_layout.addWidget(game_widget, 1)
-        vbox_widget.setLayout(vbox_layout)
+        # Main Layout
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(game_widget)
 
-        self.setLayout(vbox_layout)
+        main_widget = QWidget()
+        main_widget.setLayout(main_layout)
+        self.setLayout(main_layout)
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -74,7 +81,7 @@ class GameFrame(QFrame):
             self.board.previous_sq_idx = square_index
         else:
             print("Mouse click is outside the frame's visible area")
-        
+
         self.evaluation_bar.update_engine_evaluation(self.evaluation())
 
     # def mouseReleaseEvent(self, event: QMouseEvent):

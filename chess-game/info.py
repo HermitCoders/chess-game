@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont
 from PyQt6.QtCore import Qt, QRegularExpression, QRect, QCoreApplication
 from board import ChessMoves
-from utils import sigmoid, sign
+from utils import sigmoid
 import chess
 import chess.engine
 
@@ -26,17 +26,11 @@ import chess.engine
 class MovesRecord(QScrollArea):
     def __init__(self, parent):
         super().__init__()
-
-        self.setWidgetResizable(True)
-
         self.parent = parent
-
         self.moves_record = []
 
         self.setStyleSheet("background-color: #404040")
-        # self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setFixedSize(300, 800)
-
+        self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
 
         self.vbar = self.verticalScrollBar()
@@ -69,7 +63,7 @@ class MovesRecord(QScrollArea):
             last_move = self.parent.board.board.peek()
             moved_piece = self.parent.board.pieces_items[last_move.to_square]
             piece_symbol = str.upper(moved_piece.piece.symbol())
-            move_type = self.parent.board.move_type
+            move_type: ChessMoves = self.parent.board.move_type
 
             san_move: str = (
                 "" if piece_symbol == "P" or last_move.promotion else piece_symbol

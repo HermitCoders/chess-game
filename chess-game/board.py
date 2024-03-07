@@ -45,19 +45,13 @@ class ChessBoard(QFrame):
 
         self.highlighted_squares = set()
         self.framed_squares = set()
-
         self.previous_sq_idx = None
-
         self.possible_moves = None
         self.possible_promotions = None
-
         self.move_made = False
         self.move_type: ChessMoves = None
-
         self.pieces_items = {}
 
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setMinimumSize(8 * self.sq_size, 8 * self.sq_size)
         self.setContentsMargins(0, 0, 0, 0)
 
         self.layout = QGridLayout()
@@ -71,21 +65,37 @@ class ChessBoard(QFrame):
     def draw_board(self):
         for sqr_index in range(64):
             square = QWidget(self)
+            square.setFixedSize(sq_size, sq_size)
             square.setObjectName(chess.SQUARE_NAMES[sqr_index])
-
             self.set_square_style(sqr_index)
-
             col, row = self.get_square_coords(sqr_index)
             self.layout.addWidget(square, row, col)
 
     def draw_pieces(self):
         for sqr_index in range(64):
             col, row = self.get_square_coords(sqr_index)
-            piece = self.board.piece_at(sqr_index)
+            piece: PieceItem = self.board.piece_at(sqr_index)
             if piece:
                 piece_label = PieceItem(self, piece)
                 self.layout.addWidget(piece_label, row, col)
                 self.pieces_items[sqr_index] = piece_label
+
+    def update_pieces(self, next_board):
+        for sqr_index in range(64):
+            if self.board.piece_at(sqr_index) != next_board.piece_at(sqr_index):
+                col, row = self.get_square_coords(sqr_index)
+
+                old_piece: PieceItem = self.pieces_items.get(sqr_index)
+                if old_piece:
+                    self.layout.removeWidget(old_piece)
+                    old_piece.deleteLater()
+                    del self.pieces_items[sqr_index]
+
+                piece: chess.Piece = next_board.piece_at(sqr_index)
+                if piece:
+                    piece_label = PieceItem(self, piece)
+                    self.layout.addWidget(piece_label, row, col)
+                    self.pieces_items[sqr_index] = piece_label
 
     def get_square_coords(self, square_index):
         col = chess.square_file(square_index)
@@ -153,64 +163,36 @@ class ChessBoard(QFrame):
             self.previous_sq_idx in self.possible_moves.keys()
             and square_index in self.possible_moves[self.previous_sq_idx]
         ):
+            next_board = self.board.copy()
             if (
                 self.previous_sq_idx in self.possible_promotions.keys()
                 and square_index in self.possible_promotions[self.previous_sq_idx]
             ):
-                self.board.push(
-                    chess.Move(self.previous_sq_idx, square_index, promotion=5)
-                )
+                move = chess.Move(self.previous_sq_idx, square_index, promotion=5)
             else:
-                self.board.push(chess.Move(self.previous_sq_idx, square_index))
-            last_move = self.board.peek()
+                move = chess.Move(self.previous_sq_idx, square_index)
+            next_board.push(move)
             self.move_made = True
-            self.update_board(last_move)
+            self.set_move_type(move)
+            self.update_pieces(next_board)
+            self.board = next_board
         else:
             self.move_made = False
             self.move_type = None
-
-    def remove_piece_item(self, square_index):
-        piece = self.pieces_items[square_index]
-        self.layout.removeWidget(piece)
-        del self.pieces_items[square_index]
-        piece.deleteLater()
-
-    def move_piece_item(self, source_square_index, target_square_index):
-        # Take the piece from the source square
-        piece = self.pieces_items[source_square_index]
-        # Remove it from the source square
-        self.layout.removeWidget(piece)
-        # Place it on the target square
-        col, row = self.get_square_coords(target_square_index)
-        self.layout.addWidget(piece, row, col)
-        # Reassign the piece to the new key
-        del self.pieces_items[source_square_index]
-        self.pieces_items[target_square_index] = piece
-
-    def update_board(self, move):
+            
+    def set_move_type(self, move):
         source_square_index = move.from_square
         target_square_index = move.to_square
 
         # Capture
         if target_square_index in self.pieces_items.keys():
             # Ordinary
-            self.remove_piece_item(target_square_index)
             self.move_type = ChessMoves.capture
         
         elif (self.pieces_items[source_square_index].objectName() == "p" 
               and abs(source_square_index - target_square_index) in [7, 9]):
             # En passant
-            sgn = sign((target_square_index - source_square_index))
-            self.remove_piece_item(target_square_index - sgn * 8)
             self.move_type = ChessMoves.capture
-
-        # Promotion
-        if move.promotion:
-            self.remove_piece_item(source_square_index)
-            piece = PieceItem(self, self.board.piece_at(target_square_index))
-            col, row = self.get_square_coords(target_square_index)
-            self.layout.addWidget(piece, row, col)
-            self.pieces_items[target_square_index] = piece
 
         # Castle
         elif (
@@ -218,28 +200,7 @@ class ChessBoard(QFrame):
             and chess.square_distance(source_square_index, target_square_index) > 1
         ):
             uci_string = move.uci()
-            if uci_string == "e1g1":  # White short
-                rook_source_sq_idx = 7
-                rook_target_sq_idx = 5
+            if uci_string == "e1g1" or uci_string == "e8g8":
                 self.move_type = ChessMoves.short_castle
-            elif uci_string == "e1c1":  # White long
-                rook_source_sq_idx = 0
-                rook_target_sq_idx = 3
-                self.long_castle = True
+            elif uci_string == "e1c1" or uci_string == "e8c8":
                 self.move_type = ChessMoves.long_castle
-            elif uci_string == "e8g8":  # Black short
-                rook_source_sq_idx = 63
-                rook_target_sq_idx = 61
-                self.short_castle = True
-                self.move_type = ChessMoves.short_castle
-            elif uci_string == "e8c8":  # Black long
-                rook_source_sq_idx = 56
-                rook_target_sq_idx = 59
-                self.long_castle = True
-                self.move_type = ChessMoves.long_castle
-
-            self.move_piece_item(rook_source_sq_idx, rook_target_sq_idx)
-            self.move_piece_item(source_square_index, target_square_index)
-        
-        else:
-            self.move_piece_item(source_square_index, target_square_index)
