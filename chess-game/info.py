@@ -60,10 +60,11 @@ class MovesRecord(QScrollArea):
 
     def update_moves(self):
         if self.parent.board.move_made:
-            last_move = self.parent.board.board.peek()
-            moved_piece = self.parent.board.pieces_items[last_move.to_square]
+            board_frame = self.parent.board
+            last_move = board_frame.board.peek()
+            moved_piece = board_frame.pieces_items[last_move.to_square]
             piece_symbol = str.upper(moved_piece.piece.symbol())
-            move_type: ChessMoves = self.parent.board.move_type
+            move_type: ChessMoves = board_frame.move_type
 
             san_move: str = (
                 "" if piece_symbol == "P" or last_move.promotion else piece_symbol
@@ -84,10 +85,14 @@ class MovesRecord(QScrollArea):
             if last_move.promotion:
                 san_move += "=Q"
 
-            if self.parent.board.board.is_checkmate():
+            if board_frame.board.is_checkmate():
                 san_move += "#"
-            elif self.parent.board.board.is_check():
+                board_frame.set_square_style(board_frame.board.king(board_frame.board.turn), "check")
+            elif board_frame.board.is_check():
                 san_move += "+"
+                board_frame.set_square_style(board_frame.board.king(board_frame.board.turn), "check")
+            else:
+                board_frame.set_square_style(board_frame.board.king(1-board_frame.board.turn))
 
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)

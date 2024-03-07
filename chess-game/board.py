@@ -39,7 +39,7 @@ class ChessBoard(QFrame):
         self.board = chess.Board()
 
         self.square_colors = {"light": "#e6e6e6", "dark": "#a6a6a6"}
-        # self.highlight_colors = {'light': '#e2514c', 'dark': '#d74840'}
+        self.check_colors = {"light": "#e2514c", "dark": "#d74840"}
         self.highlight_colors = {"light": "#00e6b8", "dark": "#00cca3"}
         self.secondary_colors = {"frame": "#262626"}
 
@@ -119,6 +119,8 @@ class ChessBoard(QFrame):
         elif square_style == "frame":
             style = f'background-color: {self.square_colors[color]}; border: 4px solid {self.secondary_colors["frame"]}'
             self.framed_squares.add(square_index)
+        elif square_style == "check":
+            style = f"background-color: {self.check_colors[color]}"
         else:
             style = f"background-color: {self.square_colors[color]}"
         square.setStyleSheet(style)
@@ -179,7 +181,7 @@ class ChessBoard(QFrame):
         else:
             self.move_made = False
             self.move_type = None
-            
+
     def set_move_type(self, move):
         source_square_index = move.from_square
         target_square_index = move.to_square
@@ -188,9 +190,10 @@ class ChessBoard(QFrame):
         if target_square_index in self.pieces_items.keys():
             # Ordinary
             self.move_type = ChessMoves.capture
-        
-        elif (self.pieces_items[source_square_index].objectName() == "p" 
-              and abs(source_square_index - target_square_index) in [7, 9]):
+
+        elif self.pieces_items[source_square_index].objectName() == "p" and abs(
+            source_square_index - target_square_index
+        ) in [7, 9]:
             # En passant
             self.move_type = ChessMoves.capture
 
