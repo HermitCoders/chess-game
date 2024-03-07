@@ -14,8 +14,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHeaderView,
     QProgressBar,
+    QAbstractItemView,
 )
-from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont
+from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont, QWheelEvent
 from PyQt6.QtCore import Qt, QRegularExpression, QRect, QCoreApplication
 from board import ChessMoves
 from utils import sigmoid
@@ -23,40 +24,63 @@ import chess
 import chess.engine
 
 
-class MovesRecord(QScrollArea):
+class MyQTableWidget(QTableWidget):
+    def __init__(self):
+        super().__init__()
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y() // 120
+        current_value = self.verticalScrollBar().value()
+        self.verticalScrollBar().setValue(current_value - delta)
+
+
+class MovesRecord(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
         self.moves_record = []
 
-        self.setStyleSheet("background-color: #404040")
-        self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setStyleSheet("background-color: #363636")
 
-        self.vbar = self.verticalScrollBar()
-        self.vbar.setValue(self.vbar.maximum())
-
-        self.table_widget = QTableWidget()
+        self.table_widget = MyQTableWidget()
         self.table_widget.setFrameStyle(0)
         self.table_widget.setColumnCount(3)
         self.table_widget.verticalHeader().setVisible(False)
+        self.table_widget.verticalHeader().setDefaultSectionSize(40)
+        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
+        # self.table_widget.verticalHeader
+
         self.table_widget.horizontalHeader().setVisible(False)
         self.table_widget.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
         )
         self.table_widget.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
+            1, QHeaderView.ResizeMode.Fixed
         )
         self.table_widget.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch
+            2, QHeaderView.ResizeMode.Fixed
+        )
+
+        scroll_bar = self.table_widget.verticalScrollBar()
+        scroll_bar.setStyleSheet(
+            """QScrollBar:vertical {width: 10px; background: #363636; margin: 0px} 
+            QScrollBar::sub-page:vertical {background: #363636;}
+            QScrollBar::add-page:vertical {background: #363636;}
+            QScrollBar::handle:vertical {background: #565656;}"""
+        )
+        self.table_widget.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOn
+        )
+        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_widget.setStyleSheet(
+            "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
         )
 
         vbox_layout = QVBoxLayout()
         vbox_layout.addWidget(self.table_widget)
-
-        scroll_widget = QWidget()
-        scroll_widget.setLayout(vbox_layout)
-        self.setWidget(scroll_widget)
+        vbox_layout.setSpacing(0)
+        vbox_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(vbox_layout)
 
     def update_moves(self):
         if self.parent.board.move_made:
@@ -87,13 +111,18 @@ class MovesRecord(QScrollArea):
 
             if board_frame.board.is_checkmate():
                 san_move += "#"
-                board_frame.set_square_style(board_frame.board.king(board_frame.board.turn), "check")
+                board_frame.set_square_style(
+                    board_frame.board.king(board_frame.board.turn), "check"
+                )
             elif board_frame.board.is_check():
                 san_move += "+"
-                board_frame.set_square_style(board_frame.board.king(board_frame.board.turn), "check")
+                board_frame.set_square_style(
+                    board_frame.board.king(board_frame.board.turn), "check"
+                )
             else:
-                board_frame.set_square_style(board_frame.board.king(1-board_frame.board.turn))
-
+                board_frame.set_square_style(
+                    board_frame.board.king(1 - board_frame.board.turn)
+                )
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
 
