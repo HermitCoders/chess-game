@@ -14,7 +14,7 @@ from PyQt6.QtGui import QCloseEvent, QMouseEvent, QPalette, QColor
 from PyQt6.QtCore import Qt, QRect
 
 from board import ChessBoard
-from info import MovesRecord, EvaluationBar
+from info import MovesRecord, EvaluationBar, EngineLines
 import chess
 import chess.engine
 
@@ -34,8 +34,24 @@ class GameFrame(QFrame):
         self.board = ChessBoard(self)
         self.board.setFixedSize(800, 800)
 
+        self.engine_lines = EngineLines(self)
+        self.engine_lines.setFixedSize(300, 90)
+
         self.moves_record = MovesRecord(self)
-        self.moves_record.setFixedSize(300, 800)
+        self.moves_record.setFixedSize(300, 700)
+
+        # Right side panel
+        right_vbox_layout = QVBoxLayout()
+        right_vbox_layout.setContentsMargins(0, 0, 0, 0)
+        right_vbox_layout.setSpacing(10)
+        right_vbox_layout.addWidget(self.engine_lines)
+        right_vbox_layout.addWidget(self.moves_record)
+
+        right_vbox_widget = QWidget()
+        right_vbox_widget.setLayout(right_vbox_layout)
+        right_vbox_widget.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
 
         # Game layout
         game_layout = QHBoxLayout()
@@ -43,7 +59,7 @@ class GameFrame(QFrame):
         game_layout.setSpacing(10)
         game_layout.addWidget(self.evaluation_bar)
         game_layout.addWidget(self.board)
-        game_layout.addWidget(self.moves_record)
+        game_layout.addWidget(right_vbox_widget)
 
         game_widget = QWidget()
         game_widget.setLayout(game_layout)
@@ -81,13 +97,19 @@ class GameFrame(QFrame):
         else:
             print("Mouse click is outside the frame's visible area")
 
-        self.evaluation_bar.update_engine_evaluation(self.evaluation())
+        eval, move_num = self.evaluation()
+        self.evaluation_bar.update_engine_evaluation(eval)
+        if not self.board.board.is_checkmate():
+            self.engine_lines.update_engine_lines(eval, move_num)
+        else:
+            self.engine_lines.table_widget.clearContents()
 
     # def mouseReleaseEvent(self, event: QMouseEvent):
     #     self.moves_record.update_moves()
 
     def evaluation(self):
         info = self.engine.analyse(
-            self.board.board, chess.engine.Limit(time=0.1), multipv=3
+            self.board.board, chess.engine.Limit(time=0.2), multipv=5
         )
-        return info[0]["score"].white()
+        move_index = self.board.board.ply()
+        return info, move_index

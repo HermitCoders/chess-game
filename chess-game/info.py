@@ -22,6 +22,7 @@ from board import ChessMoves
 from utils import sigmoid
 import chess
 import chess.engine
+from itertools import pairwise
 
 
 class MyQTableWidget(QTableWidget):
@@ -46,11 +47,10 @@ class MovesRecord(QWidget):
         self.table_widget.setFrameStyle(0)
         self.table_widget.setColumnCount(3)
         self.table_widget.verticalHeader().setVisible(False)
-        self.table_widget.verticalHeader().setDefaultSectionSize(40)
-        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
-        # self.table_widget.verticalHeader
+        self.table_widget.verticalHeader().setDefaultSectionSize(35)
 
         self.table_widget.horizontalHeader().setVisible(False)
+        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
         self.table_widget.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
         )
@@ -60,7 +60,6 @@ class MovesRecord(QWidget):
         self.table_widget.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Fixed
         )
-
         scroll_bar = self.table_widget.verticalScrollBar()
         scroll_bar.setStyleSheet(
             """QScrollBar:vertical {width: 10px; background: #363636; margin: 0px} 
@@ -125,10 +124,10 @@ class MovesRecord(QWidget):
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
             self.update_moves_display(san_move)
-        
+
     def update_moves_display(self, move):
         idx = self.board_frame.board.ply() - 1
-        
+
         move_num = (idx // 2) + 1
         self.table_widget.setRowCount(move_num)
 
@@ -150,42 +149,42 @@ class MovesRecord(QWidget):
         move_item.setFont(QFont("Bahnschrift", 16))
         # Scroll to the last move
         self.table_widget.scrollToBottom()
-        
-        
 
 
 class EvaluationBar(QWidget):
     def __init__(self, parent):
         super().__init__()
-        self.evaluation = 0
+        self.centipawns = 0
         self.mate = None
 
     def set_evaluation(self, evaluation):
-        self.evaluation = evaluation
+        self.centipawns = evaluation
         self.update()  # Trigger a repaint
 
     def set_mate(self, mate):
         self.mate = mate
         self.update()  # Trigger a repaint
 
-    def update_engine_evaluation(self, score: chess.engine.Score):
+        # {'string': 'NNUE evaluation using nn-b1a57edbea57.nnue', 'depth': 0, 'score': PovScore(Mate(-0), BLACK)}]
+
+    def update_engine_evaluation(self, evaluation):
+        score = evaluation[0]["score"].white()
         if score.score() is not None:
-            evaluation = score.score() / 100
-            self.evaluation = evaluation
+            self.centipawns = score.score()
             self.mate = None
-        elif score.mate() != 0:
-            self.evaluation = None
-            self.mate = score.mate()
+        else:
+            self.centipawns = None
+            self.mate = score
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        if self.mate:
-            bar_height = int(self.mate > 0)
+        if self.centipawns is not None:
+            bar_height = sigmoid(self.centipawns / 100)
         else:
-            bar_height = sigmoid(self.evaluation)
+            bar_height = 0 if str(self.mate)[1:2] == "-" else 1
 
         rect = self.rect()
         white_height = int(rect.height() * (bar_height))
@@ -217,10 +216,10 @@ class EvaluationBar(QWidget):
             )
 
         # Draw the evaluation text
-        if self.evaluation is not None:
-            text = f"{abs(self.evaluation):.1f}"
-        elif self.mate is not None:
-            text = f"M{abs(self.mate)}"
+        if self.centipawns is not None:
+            text = f"{abs(self.centipawns / 100):.1f}"
+        else:
+            text = f"M{str(self.mate)[-1]}"
 
         text_rect = QRect(*text_pos)
         painter.drawText(
@@ -228,3 +227,106 @@ class EvaluationBar(QWidget):
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter,
             text,
         )
+
+
+class EngineLines(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+        self.board_frame = parent.board
+
+        self.setStyleSheet("background-color: #363636")
+
+        self.table_widget = MyQTableWidget()
+        self.table_widget.setFrameStyle(0)
+        self.table_widget.setRowCount(3)
+        self.table_widget.setColumnCount(2)
+        self.table_widget.verticalHeader().setVisible(False)
+        self.table_widget.verticalHeader().setDefaultSectionSize(30)
+        self.table_widget.verticalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Fixed
+        )
+        self.table_widget.verticalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Fixed
+        )
+        self.table_widget.verticalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Fixed
+        )
+
+        self.table_widget.horizontalHeader().setVisible(False)
+        # self.table_widget.horizontalHeader().setDefaultSectionSize(250)
+        self.table_widget.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.table_widget.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+
+        # self.table_widget.setStyleSheet(
+        #     "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
+        # )
+
+        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
+        vbox_layout = QVBoxLayout()
+        vbox_layout.addWidget(self.table_widget)
+        vbox_layout.setSpacing(0)
+        vbox_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(vbox_layout)
+
+    def update_engine_lines(self, evaluation, move_index):
+        self.table_widget.setColumnCount(2)
+        for idx, eval_dict in enumerate(evaluation[:3]):
+            score = eval_dict["score"].white()
+            if score.score() is not None:
+                score = str(round(score.score() / 100, 1))
+            else:
+                score = str(score.mate())
+                score = ("M" + score) if score[0] != "-" else ("-M" + score[1:])
+
+            score_item = QTableWidgetItem(str(score))
+            score_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+            )
+            self.table_widget.setItem(idx, 0, score_item)
+            score_item.setForeground(QColor("#f6f6f6"))
+            score_item.setFont(QFont("Bahnschrift", 12, QFont.Weight.Bold))
+
+            # print((move_index // 2) + 1)
+            line = eval_dict.get("pv", "")
+            if move_index % 2:
+                line_str = f"{move_index // 2 + 1}... "
+            else:
+                line_str = f"{move_index // 2 + 1}. "
+            line_str += line[0].uci()
+
+            if move_index % 2:
+                mapped_line = [
+                    f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line[1:6])
+                ]
+                line_str += "".join(
+                    f" {j+1}. {m}"
+                    for j, m in enumerate(mapped_line, move_index // 2 + 1)
+                )
+            else:
+                mapped_line = [
+                    f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line[2:6])
+                ]
+                line_str += str(" ") + line[1].uci()
+                line_str += "".join(
+                    f" {j+1}. {m}"
+                    for j, m in enumerate(mapped_line, move_index // 2 + 1)
+                )
+
+            line_item = QTableWidgetItem(line_str)
+            line_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            self.table_widget.setItem(idx, 1, line_item)
+            line_item.setForeground(QColor("#f6f6f6"))
+            line_item.setFont(QFont("Bahnschrift Light", 12))
+        self.update()
+
+        # Scroll to the last move
+        # self.table_widget.scrollToBottom()
