@@ -75,8 +75,7 @@ class GameFrame(QFrame):
                 self.board.unhighlight_all()
                 self.board.draw_possible_moves(square_index)
                 self.board.move_piece(square_index)
-                self.moves_record.update_moves()
-                self.moves_record.display_moves()
+                self.moves_record.update_moves_record()
 
             self.board.previous_sq_idx = square_index
         else:

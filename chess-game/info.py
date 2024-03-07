@@ -37,7 +37,7 @@ class MyQTableWidget(QTableWidget):
 class MovesRecord(QWidget):
     def __init__(self, parent):
         super().__init__()
-        self.parent = parent
+        self.board_frame = parent.board
         self.moves_record = []
 
         self.setStyleSheet("background-color: #363636")
@@ -82,13 +82,12 @@ class MovesRecord(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def update_moves(self):
-        if self.parent.board.move_made:
-            board_frame = self.parent.board
-            last_move = board_frame.board.peek()
-            moved_piece = board_frame.pieces_items[last_move.to_square]
+    def update_moves_record(self):
+        if self.board_frame.move_made:
+            last_move = self.board_frame.board.peek()
+            moved_piece = self.board_frame.pieces_items[last_move.to_square]
             piece_symbol = str.upper(moved_piece.piece.symbol())
-            move_type: ChessMoves = board_frame.move_type
+            move_type: ChessMoves = self.board_frame.move_type
 
             san_move: str = (
                 "" if piece_symbol == "P" or last_move.promotion else piece_symbol
@@ -109,49 +108,50 @@ class MovesRecord(QWidget):
             if last_move.promotion:
                 san_move += "=Q"
 
-            if board_frame.board.is_checkmate():
+            if self.board_frame.board.is_checkmate():
                 san_move += "#"
-                board_frame.set_square_style(
-                    board_frame.board.king(board_frame.board.turn), "check"
+                self.board_frame.set_square_style(
+                    self.board_frame.board.king(self.board_frame.board.turn), "check"
                 )
-            elif board_frame.board.is_check():
+            elif self.board_frame.board.is_check():
                 san_move += "+"
-                board_frame.set_square_style(
-                    board_frame.board.king(board_frame.board.turn), "check"
+                self.board_frame.set_square_style(
+                    self.board_frame.board.king(self.board_frame.board.turn), "check"
                 )
             else:
-                board_frame.set_square_style(
-                    board_frame.board.king(1 - board_frame.board.turn)
+                self.board_frame.set_square_style(
+                    self.board_frame.board.king(1 - self.board_frame.board.turn)
                 )
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
+            self.update_moves_display(san_move)
+        
+    def update_moves_display(self, move):
+        idx = self.board_frame.board.ply() - 1
+        
+        move_num = (idx // 2) + 1
+        self.table_widget.setRowCount(move_num)
 
-    def display_moves(self):
-        if not self.moves_record:
-            return
+        move_num_item = QTableWidgetItem(str(move_num) + ".")
+        move_num_item.setTextAlignment(
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.table_widget.setItem(idx // 2, 0, move_num_item)
 
-        for idx, move in enumerate(self.moves_record):
-            move_num = (idx // 2) + 1
-            self.table_widget.setRowCount(move_num)
+        move_item = QTableWidgetItem(move)
+        move_item.setTextAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.table_widget.setItem(idx // 2, 1 if idx % 2 == 0 else 2, move_item)
 
-            move_num_item = QTableWidgetItem(str(move_num) + ".")
-            move_num_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
-            )
-            self.table_widget.setItem(idx // 2, 0, move_num_item)
-
-            move_item = QTableWidgetItem(move)
-            move_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-            )
-            self.table_widget.setItem(idx // 2, 1 if idx % 2 == 0 else 2, move_item)
-
-            move_num_item.setForeground(QColor("#f6f6f6"))
-            move_item.setForeground(QColor("#f6f6f6"))
-            move_num_item.setFont(QFont("Bahnschrift", 16))
-            move_item.setFont(QFont("Bahnschrift", 16))
+        move_num_item.setForeground(QColor("#f6f6f6"))
+        move_item.setForeground(QColor("#f6f6f6"))
+        move_num_item.setFont(QFont("Bahnschrift", 16))
+        move_item.setFont(QFont("Bahnschrift", 16))
         # Scroll to the last move
         self.table_widget.scrollToBottom()
+        
+        
 
 
 class EvaluationBar(QWidget):
