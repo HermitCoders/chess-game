@@ -75,8 +75,9 @@ class ChessBoard(QFrame):
                 old_piece: PieceItem = self.pieces_items.get(sqr_index)
                 if old_piece:
                     self.layout.removeWidget(old_piece)
-                    old_piece.deleteLater()
                     del self.pieces_items[sqr_index]
+                    old_piece.deleteLater()
+                    old_piece.setParent(None)
 
                 piece: chess.Piece = next_board.piece_at(sqr_index)
                 if piece:
@@ -194,3 +195,5 @@ class ChessBoard(QFrame):
                 self.move_type = ChessMoves.short_castle
             elif uci_string == "e1c1" or uci_string == "e8c8":
                 self.move_type = ChessMoves.long_castle
+        else:
+            self.move_type = None
