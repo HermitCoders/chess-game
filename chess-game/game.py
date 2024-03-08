@@ -1,48 +1,73 @@
-import sys
 from PyQt6.QtWidgets import (
-    QApplication,
     QFrame,
-    QGridLayout,
-    QLabel,
-    QMessageBox,
     QSizePolicy,
     QWidget,
     QHBoxLayout,
     QVBoxLayout,
 )
-from PyQt6.QtGui import QPalette, QColor
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QRect
+import chess
+import chess.engine
 
 from board import ChessBoard
-from piece import PieceItem
-import chess
+from info import MovesRecord, EvaluationBar, EngineLines
 
 
 class GameFrame(QFrame):
-    def __init__(self, parent):
-        super().__init__()
+    def __init__(self, parent, engine):
+        super().__init__(parent)
 
         self.parent = parent
+        self.engine = engine
 
         self.setStyleSheet("background-color: #262626")
 
-        self.board = ChessBoard(self)
+        self.evaluation_bar = EvaluationBar(self)
+        self.evaluation_bar.setFixedSize(30, 800)
 
-        game_widget = QWidget()
+        self.board = ChessBoard(self)
+        self.board.setFixedSize(800, 800)
+
+        self.engine_lines = EngineLines(self)
+        self.engine_lines.setFixedSize(300, 90)
+
+        self.moves_record = MovesRecord(self)
+        self.moves_record.setFixedSize(300, 700)
+
+        # Right side panel
+        right_vbox_layout = QVBoxLayout()
+        right_vbox_layout.setContentsMargins(0, 0, 0, 0)
+        right_vbox_layout.setSpacing(10)
+        right_vbox_layout.addWidget(self.engine_lines)
+        right_vbox_layout.addWidget(self.moves_record)
+
+        right_vbox_widget = QWidget()
+        right_vbox_widget.setLayout(right_vbox_layout)
+        right_vbox_widget.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
+
+        # Game layout
         game_layout = QHBoxLayout()
         game_layout.setContentsMargins(0, 0, 0, 0)
-        game_layout.setSpacing(0)
-        game_layout.addWidget(self.board, 1)
+        game_layout.setSpacing(10)
+        game_layout.addWidget(self.evaluation_bar)
+        game_layout.addWidget(self.board)
+        game_layout.addWidget(right_vbox_widget)
+
+        game_widget = QWidget()
         game_widget.setLayout(game_layout)
 
-        vbox_widget = QWidget()
-        vbox_layout = QVBoxLayout()
-        vbox_layout.addWidget(game_widget, 1)
-        vbox_widget.setLayout(vbox_layout)
+        # Main Layout
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(game_widget)
 
-        self.setLayout(vbox_layout)
+        main_widget = QWidget()
+        main_widget.setLayout(main_layout)
+        self.setLayout(main_layout)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
 
         rect = QRect(
@@ -61,7 +86,25 @@ class GameFrame(QFrame):
                 self.board.unhighlight_all()
                 self.board.draw_possible_moves(square_index)
                 self.board.move_piece(square_index)
+                self.moves_record.update_moves_record()
 
             self.board.previous_sq_idx = square_index
         else:
             print("Mouse click is outside the frame's visible area")
+
+        eval, move_num = self.evaluation()
+        self.evaluation_bar.update_engine_evaluation(eval)
+        if not self.board.board.is_checkmate():
+            self.engine_lines.update_engine_lines(eval, move_num)
+        else:
+            self.engine_lines.table_widget.clearContents()
+
+    # def mouseReleaseEvent(self, event: QMouseEvent):
+    #     self.moves_record.update_moves()
+
+    def evaluation(self):
+        info = self.engine.analyse(
+            self.board.board, chess.engine.Limit(time=0.1), multipv=5
+        )
+        move_index = self.board.board.ply()
+        return info, move_index
