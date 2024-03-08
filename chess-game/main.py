@@ -1,9 +1,9 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QSizePolicy
-from PyQt6.QtGui import QPalette, QColor, QCloseEvent
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt6.QtGui import QCloseEvent
+import chess.engine
 
 from game import GameFrame
-import chess.engine
 
 
 class MainWindow(QMainWindow):

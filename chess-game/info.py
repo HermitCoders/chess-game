@@ -1,28 +1,19 @@
-import sys
 from PyQt6.QtWidgets import (
-    QApplication,
-    QFrame,
-    QGridLayout,
-    QLabel,
-    QMessageBox,
-    QSizePolicy,
     QWidget,
-    QGraphicsView,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QHeaderView,
-    QProgressBar,
     QAbstractItemView,
 )
-from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QFont, QWheelEvent
-from PyQt6.QtCore import Qt, QRegularExpression, QRect, QCoreApplication
-from board import ChessMoves
-from utils import sigmoid
+from PyQt6.QtGui import QColor, QPainter, QFont
+from PyQt6.QtCore import Qt, QRect
+from itertools import pairwise
 import chess
 import chess.engine
-from itertools import pairwise
+
+from board import ChessMoves
+from utils import sigmoid
 
 
 class MyQTableWidget(QTableWidget):
@@ -31,6 +22,7 @@ class MyQTableWidget(QTableWidget):
 
     def wheelEvent(self, event):
         delta = event.angleDelta().y() // 120
+        # most mice have a baseline scroll speed of 120 units per "notch"
         current_value = self.verticalScrollBar().value()
         self.verticalScrollBar().setValue(current_value - delta)
 
@@ -157,16 +149,6 @@ class EvaluationBar(QWidget):
         self.centipawns = 0
         self.mate = None
 
-    def set_evaluation(self, evaluation):
-        self.centipawns = evaluation
-        self.update()  # Trigger a repaint
-
-    def set_mate(self, mate):
-        self.mate = mate
-        self.update()  # Trigger a repaint
-
-        # {'string': 'NNUE evaluation using nn-b1a57edbea57.nnue', 'depth': 0, 'score': PovScore(Mate(-0), BLACK)}]
-
     def update_engine_evaluation(self, evaluation):
         score = evaluation[0]["score"].white()
         if score.score() is not None:
@@ -214,7 +196,6 @@ class EvaluationBar(QWidget):
                 rect.width(),
                 painter.fontMetrics().height(),
             )
-
         # Draw the evaluation text
         if self.centipawns is not None:
             text = f"{abs(self.centipawns / 100):.1f}"
@@ -261,10 +242,6 @@ class EngineLines(QWidget):
             1, QHeaderView.ResizeMode.Stretch
         )
 
-        # self.table_widget.setStyleSheet(
-        #     "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
-        # )
-
         self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -275,58 +252,65 @@ class EngineLines(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def update_engine_lines(self, evaluation, move_index):
+    def map_line(self, line):
+        return [f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line)]
+
+    def get_score_str(self, score):
+        if score.score() is not None:
+            score_str = str(round(score.score() / 100, 1))
+        else:
+            score_str = str(score.mate())
+            score_str = (
+                ("M" + score_str)
+                if score_str.startswith("-")
+                else ("-M" + score_str[1:])
+            )
+        return score_str
+
+    def get_line_str(self, line, move_num):
+        var_move_idx = move_num // 2 + 1
+        move_idx_str = f"{var_move_idx}... " if move_num % 2 else f"{var_move_idx}. "
+        line_str = move_idx_str + line[0].uci()
+
+        mapped_line = (
+            self.map_line(line[1:6]) if move_num % 2 else self.map_line(line[2:6])
+        )
+
+        if mapped_line:
+            if not move_num % 2:
+                line_str += str(" ") + line[1].uci()
+            line_str += "".join(
+                f"   {j+1}. {m}" for j, m in enumerate(mapped_line, var_move_idx)
+            )
+        return line_str
+
+    def add_table_item(self, text, row, col, alignment):
+        item = QTableWidgetItem(text)
+        item.setTextAlignment(alignment)
+        item.setForeground(QColor("#f6f6f6"))
+        item.setFont(QFont("Bahnschrift", 12))
+        self.table_widget.setItem(row, col, item)
+
+    def update_engine_lines(self, evaluation, move_num):
         self.table_widget.setColumnCount(2)
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()
-            if score.score() is not None:
-                score = str(round(score.score() / 100, 1))
-            else:
-                score = str(score.mate())
-                score = ("M" + score) if score[0] != "-" else ("-M" + score[1:])
-
-            score_item = QTableWidgetItem(str(score))
-            score_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+            score_str = self.get_score_str(score)
+            self.add_table_item(
+                score_str,
+                idx,
+                0,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
             )
-            self.table_widget.setItem(idx, 0, score_item)
-            score_item.setForeground(QColor("#f6f6f6"))
-            score_item.setFont(QFont("Bahnschrift", 12, QFont.Weight.Bold))
 
-            # print((move_index // 2) + 1)
             line = eval_dict.get("pv", "")
-            if move_index % 2:
-                line_str = f"{move_index // 2 + 1}... "
-            else:
-                line_str = f"{move_index // 2 + 1}. "
-            line_str += line[0].uci()
-
-            if move_index % 2:
-                mapped_line = [
-                    f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line[1:6])
-                ]
-                line_str += "".join(
-                    f" {j+1}. {m}"
-                    for j, m in enumerate(mapped_line, move_index // 2 + 1)
+            # Consider only lines longer than two moves unless its forced mate
+            if len(line) > 2 or score.mate():
+                line_str = self.get_line_str(line, move_num)
+                self.add_table_item(
+                    line_str,
+                    idx,
+                    1,
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 )
-            else:
-                mapped_line = [
-                    f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line[2:6])
-                ]
-                line_str += str(" ") + line[1].uci()
-                line_str += "".join(
-                    f" {j+1}. {m}"
-                    for j, m in enumerate(mapped_line, move_index // 2 + 1)
-                )
-
-            line_item = QTableWidgetItem(line_str)
-            line_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-            )
-            self.table_widget.setItem(idx, 1, line_item)
-            line_item.setForeground(QColor("#f6f6f6"))
-            line_item.setFont(QFont("Bahnschrift Light", 12))
         self.update()
-
-        # Scroll to the last move
-        # self.table_widget.scrollToBottom()

@@ -1,24 +1,9 @@
-import sys
-from PyQt6.QtWidgets import (
-    QApplication,
-    QFrame,
-    QGridLayout,
-    QLabel,
-    QMessageBox,
-    QSizePolicy,
-    QWidget,
-    QGraphicsView,
-)
-from PyQt6.QtGui import QPalette, QColor, QPainter, QBrush, QPen
-from PyQt6.QtCore import Qt, QRegularExpression, QRect
-
-import chess
-from piece import PieceItem
+from PyQt6.QtWidgets import QFrame, QGridLayout, QWidget
 from collections import defaultdict
 from enum import Enum
-from utils import sign
+import chess
 
-sq_size = 100
+from piece import PieceItem
 
 
 class ChessMoves(str, Enum):
@@ -34,9 +19,11 @@ class ChessBoard(QFrame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.sq_size = sq_size
+        self.SQUARE_SIZE = 100
+        self.SQUARES_NUMBER = 64
         # self.board = chess.Board("rnbqkbnr/pp1p1ppp/8/2pPp3/8/8/PPP1PPPP/RNBQKBNR w KQkq c6 0 1")
         self.board = chess.Board()
+        self.next_board = None
 
         self.square_colors = {"light": "#e6e6e6", "dark": "#a6a6a6"}
         self.check_colors = {"light": "#e2514c", "dark": "#d74840"}
@@ -63,16 +50,16 @@ class ChessBoard(QFrame):
         self.setLayout(self.layout)
 
     def draw_board(self):
-        for sqr_index in range(64):
+        for sqr_index in range(self.SQUARES_NUMBER):
             square = QWidget(self)
-            square.setFixedSize(sq_size, sq_size)
+            square.setFixedSize(self.SQUARE_SIZE, self.SQUARE_SIZE)
             square.setObjectName(chess.SQUARE_NAMES[sqr_index])
             self.set_square_style(sqr_index)
             col, row = self.get_square_coords(sqr_index)
             self.layout.addWidget(square, row, col)
 
     def draw_pieces(self):
-        for sqr_index in range(64):
+        for sqr_index in range(self.SQUARES_NUMBER):
             col, row = self.get_square_coords(sqr_index)
             piece: PieceItem = self.board.piece_at(sqr_index)
             if piece:
@@ -81,7 +68,7 @@ class ChessBoard(QFrame):
                 self.pieces_items[sqr_index] = piece_label
 
     def update_pieces(self, next_board):
-        for sqr_index in range(64):
+        for sqr_index in range(self.SQUARES_NUMBER):
             if self.board.piece_at(sqr_index) != next_board.piece_at(sqr_index):
                 col, row = self.get_square_coords(sqr_index)
 
@@ -148,8 +135,8 @@ class ChessBoard(QFrame):
         self.possible_promotions = possible_promotions
 
     def mouse_position_to_square_index(self, mouse_position):
-        col = int(mouse_position.x() // self.sq_size)
-        row = 7 - int(mouse_position.y() // self.sq_size)
+        col = int(mouse_position.x() // self.SQUARE_SIZE)
+        row = 7 - int(mouse_position.y() // self.SQUARE_SIZE)
         square_index = chess.square(col, row)
         return square_index
 
@@ -165,7 +152,7 @@ class ChessBoard(QFrame):
             self.previous_sq_idx in self.possible_moves.keys()
             and square_index in self.possible_moves[self.previous_sq_idx]
         ):
-            next_board = self.board.copy()
+            self.next_board = self.board.copy()
             if (
                 self.previous_sq_idx in self.possible_promotions.keys()
                 and square_index in self.possible_promotions[self.previous_sq_idx]
@@ -173,11 +160,11 @@ class ChessBoard(QFrame):
                 move = chess.Move(self.previous_sq_idx, square_index, promotion=5)
             else:
                 move = chess.Move(self.previous_sq_idx, square_index)
-            next_board.push(move)
+            self.next_board.push(move)
             self.move_made = True
             self.set_move_type(move)
-            self.update_pieces(next_board)
-            self.board = next_board
+            self.update_pieces(self.next_board)
+            self.board = self.next_board
         else:
             self.move_made = False
             self.move_type = None

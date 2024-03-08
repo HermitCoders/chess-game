@@ -1,19 +1,6 @@
-import sys
-from PyQt6.QtWidgets import (
-    QApplication,
-    QFrame,
-    QGridLayout,
-    QLabel,
-    QMessageBox,
-    QSizePolicy,
-    QWidget,
-    QLabel,
-    QGraphicsPixmapItem,
-    QGraphicsItem,
-)
-from PyQt6.QtGui import QPalette, QColor, QPixmap, QCursor
-from PyQt6.QtCore import Qt, QRegularExpression
-
+from PyQt6.QtWidgets import QLabel
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt
 import chess
 
 
@@ -24,7 +11,7 @@ class PieceItem(QLabel):
         self.board = parent
         self.piece = piece
 
-        self.setMaximumSize(self.board.sq_size, self.board.sq_size)
+        self.setMaximumSize(self.board.SQUARE_SIZE, self.board.SQUARE_SIZE)
 
         # Make label transparent, so square behind piece is visible
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)

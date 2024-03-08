@@ -1,22 +1,17 @@
-import sys
 from PyQt6.QtWidgets import (
-    QApplication,
     QFrame,
-    QGridLayout,
-    QLabel,
-    QMessageBox,
     QSizePolicy,
     QWidget,
     QHBoxLayout,
     QVBoxLayout,
 )
-from PyQt6.QtGui import QCloseEvent, QMouseEvent, QPalette, QColor
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QRect
+import chess
+import chess.engine
 
 from board import ChessBoard
 from info import MovesRecord, EvaluationBar, EngineLines
-import chess
-import chess.engine
 
 
 class GameFrame(QFrame):
@@ -109,7 +104,7 @@ class GameFrame(QFrame):
 
     def evaluation(self):
         info = self.engine.analyse(
-            self.board.board, chess.engine.Limit(time=0.2), multipv=5
+            self.board.board, chess.engine.Limit(time=0.1), multipv=5
         )
         move_index = self.board.board.ply()
         return info, move_index
