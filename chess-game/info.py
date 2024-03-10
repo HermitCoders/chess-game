@@ -61,8 +61,8 @@ class MovesRecord(QWidget):
         self.table_widget.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn
         )
-        # self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        # self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_widget.setStyleSheet(
             "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
@@ -244,7 +244,7 @@ class EngineLines(QWidget):
         item.setFont(QFont("Bahnschrift", 12))
         self.table_widget.setItem(row, col, item)
 
-    def update_engine_lines(self, evaluation, move_num):
+    def update_engine_lines(self, evaluation):
         self.table_widget.setColumnCount(2)
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()

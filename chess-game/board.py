@@ -112,7 +112,7 @@ class ChessBoard(QFrame):
         for sqr_index in self.framed_squares:
             self.set_square_style(sqr_index)
         self.framed_squares = set()
-        
+
     def uncheck_all(self):
         for sqr_index in self.checked_squares:
             self.set_square_style(sqr_index)
@@ -148,7 +148,6 @@ class ChessBoard(QFrame):
             self.previous_sq_idx in self.possible_moves.keys()
             and square_index in self.possible_moves[self.previous_sq_idx]
         ):
-            self.previous_board = self.board.copy()
             if (
                 self.previous_sq_idx in self.possible_promotions.keys()
                 and square_index in self.possible_promotions[self.previous_sq_idx]
@@ -156,6 +155,7 @@ class ChessBoard(QFrame):
                 move = chess.Move(self.previous_sq_idx, square_index, promotion=5)
             else:
                 move = chess.Move(self.previous_sq_idx, square_index)
+            self.previous_board = self.board.copy()
             self.board.push(move)
             self.move_made = True
             self.update_pieces(self.board)

@@ -69,6 +69,7 @@ class GameFrame(QFrame):
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
         self.setLayout(main_layout)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -95,10 +96,10 @@ class GameFrame(QFrame):
         else:
             print("Mouse click is outside the frame's visible area")
 
-        eval, move_num = self.evaluation()
+        eval = self.evaluation()
         self.evaluation_bar.update_engine_evaluation(eval)
         if not self.board.board.is_checkmate():
-            self.engine_lines.update_engine_lines(eval, move_num)
+            self.engine_lines.update_engine_lines(eval)
         else:
             self.engine_lines.table_widget.clearContents()
 
@@ -106,8 +107,7 @@ class GameFrame(QFrame):
         info = self.engine.analyse(
             self.board.board, chess.engine.Limit(time=0.1), multipv=5
         )
-        move_index = self.board.board.ply()
-        return info, move_index
+        return info
     
     def import_pgn(self, pgn_path):
         with open(pgn_path) as pgn:
@@ -127,21 +127,23 @@ class GameFrame(QFrame):
         if event.key() == Qt.Key.Key_Control:
             self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn")
         elif event.key() == Qt.Key.Key_Left:
-            print("Left")
-            self.board.previous_board = self.board.board.copy()
-            
-            popped_move = self.board.board.pop()
-            self.popped_moves.append(popped_move)
-            self.board.move_made = True
-            self.board.update_pieces(self.board.board)
+            if self.board.board.move_stack:
+                self.board.uncheck_all()
+                self.board.previous_board = self.board.board.copy()
+                
+                popped_move = self.board.board.pop()
+                self.popped_moves.append(popped_move)
+                self.board.move_made = True
+                self.board.update_pieces(self.board.board)
 
         elif event.key() == Qt.Key.Key_Right:
-            print("Right")
-            self.board.previous_board = self.board.board.copy()
-            
-            popped_move = self.popped_moves.pop()
-            self.board.board.push(popped_move)
-            self.board.move_made = True
-            self.board.update_pieces(self.board.board)
+            if self.popped_moves:
+                self.board.uncheck_all()
+                self.board.previous_board = self.board.board.copy()
+                
+                popped_move = self.popped_moves.pop()
+                self.board.board.push(popped_move)
+                self.board.move_made = True
+                self.board.update_pieces(self.board.board)
 
             
