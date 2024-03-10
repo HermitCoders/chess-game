@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QApplication
 )
-from PyQt6.QtGui import QKeyEvent, QMouseEvent
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QRect
 import chess
 import chess.engine
@@ -145,5 +145,13 @@ class GameFrame(QFrame):
                 self.board.board.push(popped_move)
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
+        moves_num = len(self.board.board.move_stack)
+        turns_num = (moves_num - 1) // 2
+
+        if moves_num % 2 == 0:
+            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 + 2) 
+        else:
+            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2) 
+            
 
             
