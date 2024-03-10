@@ -225,9 +225,6 @@ class EngineLines(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def map_line(self, line):
-        return [f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line)]
-
     def get_score_str(self, score):
         if score.score() is not None:
             score_str = str(round(score.score() / 100, 1))
@@ -239,23 +236,6 @@ class EngineLines(QWidget):
                 else ("M" + score_str)
             )
         return score_str
-
-    def get_line_str(self, line, move_num):
-        var_move_idx = move_num // 2 + 1
-        move_idx_str = f"{var_move_idx}... " if move_num % 2 else f"{var_move_idx}. "
-        line_str = move_idx_str + line[0].uci()
-
-        mapped_line = (
-            self.map_line(line[1:6]) if move_num % 2 else self.map_line(line[2:6])
-        )
-
-        if mapped_line:
-            if not move_num % 2:
-                line_str += str(" ") + line[1].uci()
-            line_str += "".join(
-                f"   {j+1}. {m}" for j, m in enumerate(mapped_line, var_move_idx)
-            )
-        return line_str
 
     def add_table_item(self, text, row, col, alignment):
         item = QTableWidgetItem(text)
@@ -279,7 +259,7 @@ class EngineLines(QWidget):
             line = eval_dict.get("pv", "")
             # Consider only lines longer than two moves unless its forced mate
             if len(line) > 2 or score.mate():
-                line_str = self.get_line_str(line, move_num)
+                line_str = self.board_frame.board.variation_san(line)
                 self.add_table_item(
                     line_str,
                     idx,
