@@ -22,6 +22,7 @@ class GameFrame(QFrame):
 
         self.parent = parent
         self.engine = engine
+        self.popped_moves = []
 
         self.setStyleSheet("background-color: #262626")
 
@@ -127,5 +128,25 @@ class GameFrame(QFrame):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
             self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn")
+        elif event.key() == Qt.Key.Key_Left:
+            print("Left")
+            self.board.previous_board = self.board.board.copy()
+            
+            popped_move = self.board.board.pop()
+            self.popped_moves.append(popped_move)
+            self.board.move_made = True
+            # self.board.set_move_type(move)
+            self.board.update_pieces(self.board.board)
+            
+            # print()
+        elif event.key() == Qt.Key.Key_Right:
+            print("Right")
+            self.board.previous_board = self.board.board.copy()
+            
+            popped_move = self.popped_moves.pop()
+            self.board.board.push(popped_move)
+            self.board.move_made = True
+            # self.board.set_move_type(move)
+            self.board.update_pieces(self.board.board)
 
             

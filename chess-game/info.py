@@ -62,6 +62,8 @@ class MovesRecord(QWidget):
         self.table_widget.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn
         )
+        # self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_widget.setStyleSheet(
             "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
