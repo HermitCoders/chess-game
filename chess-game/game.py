@@ -113,35 +113,19 @@ class GameFrame(QFrame):
             game = chess.pgn.read_game(pgn)
             self.board.board = game.board()
             for move in game.mainline_moves():
-                self.board.next_board = self.board.board.copy()
+                self.board.previous_board = self.board.board.copy()
                 
-                self.board.next_board.push(move)
+                self.board.board.push(move)
                 self.board.move_made = True
                 self.board.set_move_type(move)
-                self.board.update_pieces(self.board.next_board)
-                self.board.board = self.board.next_board
+                self.board.update_pieces(self.board.board)
+                # self.board.board = self.board.next_board
                 self.moves_record.update_moves_record()
                 
                 QApplication.processEvents()
                                 
     def keyPressEvent(self, event):
-        # if event.key() == Qt.Key.Key_Control:
-        #     if self.i == 0:
-        #         with open("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM (1).pgn") as pgn:
-        #             self.imported_game = chess.pgn.read_game(pgn)
-        #             self.board.board = self.imported_game.board()
-        #     move = list(self.imported_game.mainline_moves())[self.i]
-        #     self.board.next_board = self.board.board.copy()
-            
-        #     self.board.next_board.push(move)
-        #     self.board.move_made = True
-        #     self.board.set_move_type(move)
-        #     self.board.update_pieces(self.board.next_board)
-        #     self.board.board = self.board.next_board
-        #     self.moves_record.update_moves_record()
-        #     print(self.board.board)
-                
-        #         # self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM (1).pgn")
-        #     self.i += 1
-        self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn")
+        if event.key() == Qt.Key.Key_Control:
+            self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn")
+
             

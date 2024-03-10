@@ -23,7 +23,7 @@ class ChessBoard(QFrame):
         self.SQUARES_NUMBER = 64
         # self.board = chess.Board("rnbqkbnr/pp1p1ppp/8/2pPp3/8/8/PPP1PPPP/RNBQKBNR w KQkq c6 0 1")
         self.board = chess.Board()
-        self.next_board = None
+        self.previous_board = None
 
         self.square_colors = {"light": "#e6e6e6", "dark": "#a6a6a6"}
         self.check_colors = {"light": "#e2514c", "dark": "#d74840"}
@@ -32,6 +32,7 @@ class ChessBoard(QFrame):
 
         self.highlighted_squares = set()
         self.framed_squares = set()
+        self.checked_squares = set()
         self.previous_sq_idx = None
         self.possible_moves = None
         self.possible_promotions = None
@@ -69,7 +70,7 @@ class ChessBoard(QFrame):
 
     def update_pieces(self, next_board):
         for sqr_index in range(self.SQUARES_NUMBER):
-            if self.board.piece_at(sqr_index) != next_board.piece_at(sqr_index):
+            if self.previous_board.piece_at(sqr_index) != next_board.piece_at(sqr_index):
                 col, row = self.get_square_coords(sqr_index)
 
                 old_piece: PieceItem = self.pieces_items.get(sqr_index)
@@ -122,6 +123,11 @@ class ChessBoard(QFrame):
         for sqr_index in self.framed_squares:
             self.set_square_style(sqr_index)
         self.framed_squares = set()
+        
+    def uncheck_all(self):
+        for sqr_index in self.checked_squares:
+            self.set_square_style(sqr_index)
+        self.checked_squares = set()
 
     def get_possible_moves(self):
         possible_moves = defaultdict(list)
@@ -153,7 +159,7 @@ class ChessBoard(QFrame):
             self.previous_sq_idx in self.possible_moves.keys()
             and square_index in self.possible_moves[self.previous_sq_idx]
         ):
-            self.next_board = self.board.copy()
+            self.previous_board = self.board.copy()
             if (
                 self.previous_sq_idx in self.possible_promotions.keys()
                 and square_index in self.possible_promotions[self.previous_sq_idx]
@@ -161,11 +167,11 @@ class ChessBoard(QFrame):
                 move = chess.Move(self.previous_sq_idx, square_index, promotion=5)
             else:
                 move = chess.Move(self.previous_sq_idx, square_index)
-            self.next_board.push(move)
+            self.board.push(move)
             self.move_made = True
             self.set_move_type(move)
-            self.update_pieces(self.next_board)
-            self.board = self.next_board
+            self.update_pieces(self.board)
+            # self.board = self.next_board
         else:
             self.move_made = False
             self.move_type = None

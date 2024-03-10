@@ -76,43 +76,15 @@ class MovesRecord(QWidget):
     def update_moves_record(self):
         if self.board_frame.move_made:
             last_move = self.board_frame.board.peek()
-            moved_piece = self.board_frame.pieces_items[last_move.to_square]
-            piece_symbol = str.upper(moved_piece.piece.symbol())
-            move_type: ChessMoves = self.board_frame.move_type
+            
+            san_move = self.board_frame.previous_board.san(last_move)
 
-            san_move: str = (
-                "" if piece_symbol == "P" or last_move.promotion else piece_symbol
-            ) + chess.SQUARE_NAMES[last_move.to_square]
-
-            if move_type == ChessMoves.capture:
-                if piece_symbol == "P" or last_move.promotion:
-                    san_move = (
-                        chess.SQUARE_NAMES[last_move.from_square][:1]
-                        + move_type
-                        + san_move
-                    )
-                else:
-                    san_move = san_move[:1] + move_type + san_move[1:]
-            elif move_type in [ChessMoves.short_castle, ChessMoves.long_castle]:
-                san_move = move_type
-
-            if last_move.promotion:
-                san_move += "=Q"
-
-            if self.board_frame.board.is_checkmate():
-                san_move += "#"
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(self.board_frame.board.turn), "check"
-                )
-            elif self.board_frame.board.is_check():
-                san_move += "+"
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(self.board_frame.board.turn), "check"
-                )
+            if self.board_frame.board.is_check():
+                king_square = self.board_frame.board.king(self.board_frame.board.turn)
+                self.board_frame.set_square_style(king_square, "check")
+                self.board_frame.checked_squares.add(king_square)
             else:
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(1 - self.board_frame.board.turn)
-                )
+                self.board_frame.uncheck_all()
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
             self.update_moves_display(san_move)
@@ -261,9 +233,9 @@ class EngineLines(QWidget):
         else:
             score_str = str(score.mate())
             score_str = (
-                ("M" + score_str)
+                ("-M" + score_str[1:])
                 if score_str.startswith("-")
-                else ("-M" + score_str[1:])
+                else ("M" + score_str)
             )
         return score_str
 
