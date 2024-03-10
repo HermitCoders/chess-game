@@ -12,7 +12,6 @@ from itertools import pairwise
 import chess
 import chess.engine
 
-from board import ChessMoves
 from utils import sigmoid
 
 

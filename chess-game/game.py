@@ -118,9 +118,7 @@ class GameFrame(QFrame):
                 
                 self.board.board.push(move)
                 self.board.move_made = True
-                self.board.set_move_type(move)
                 self.board.update_pieces(self.board.board)
-                # self.board.board = self.board.next_board
                 self.moves_record.update_moves_record()
                 
                 QApplication.processEvents()
@@ -135,10 +133,8 @@ class GameFrame(QFrame):
             popped_move = self.board.board.pop()
             self.popped_moves.append(popped_move)
             self.board.move_made = True
-            # self.board.set_move_type(move)
             self.board.update_pieces(self.board.board)
-            
-            # print()
+
         elif event.key() == Qt.Key.Key_Right:
             print("Right")
             self.board.previous_board = self.board.board.copy()
@@ -146,7 +142,6 @@ class GameFrame(QFrame):
             popped_move = self.popped_moves.pop()
             self.board.board.push(popped_move)
             self.board.move_made = True
-            # self.board.set_move_type(move)
             self.board.update_pieces(self.board.board)
 
             

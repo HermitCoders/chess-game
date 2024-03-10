@@ -1,18 +1,8 @@
 from PyQt6.QtWidgets import QFrame, QGridLayout, QWidget
 from collections import defaultdict
-from enum import Enum
 import chess
 
 from piece import PieceItem
-
-
-class ChessMoves(str, Enum):
-    capture = "x"
-    short_castle = "O-O"
-    long_castle = "O-O-O"
-
-    def __str__(self) -> str:
-        return self.value
 
 
 class ChessBoard(QFrame):
@@ -37,7 +27,6 @@ class ChessBoard(QFrame):
         self.possible_moves = None
         self.possible_promotions = None
         self.move_made = False
-        self.move_type: ChessMoves = None
         self.pieces_items = {}
 
         self.setContentsMargins(0, 0, 0, 0)
@@ -169,37 +158,6 @@ class ChessBoard(QFrame):
                 move = chess.Move(self.previous_sq_idx, square_index)
             self.board.push(move)
             self.move_made = True
-            self.set_move_type(move)
             self.update_pieces(self.board)
-            # self.board = self.next_board
         else:
             self.move_made = False
-            self.move_type = None
-
-    def set_move_type(self, move):
-        source_square_index = move.from_square
-        target_square_index = move.to_square
-
-        # Capture
-        if target_square_index in self.pieces_items.keys():
-            # Ordinary
-            self.move_type = ChessMoves.capture
-
-        elif self.pieces_items[source_square_index].objectName() == "p" and abs(
-            source_square_index - target_square_index
-        ) in [7, 9]:
-            # En passant
-            self.move_type = ChessMoves.capture
-
-        # Castle
-        elif (
-            self.pieces_items[source_square_index].objectName() == "k"
-            and chess.square_distance(source_square_index, target_square_index) > 1
-        ):
-            uci_string = move.uci()
-            if uci_string == "e1g1" or uci_string == "e8g8":
-                self.move_type = ChessMoves.short_castle
-            elif uci_string == "e1c1" or uci_string == "e8c8":
-                self.move_type = ChessMoves.long_castle
-        else:
-            self.move_type = None
