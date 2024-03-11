@@ -131,13 +131,24 @@ class GameFrame(QFrame):
                 self.board.move_piece(square_index)
                 if self.board.move_made:
                     the_move = self.board.board.peek()
+                    print(f"Move: {the_move},   Next move: {self.move_tree.get_next_move()}")
                     if self.move_tree.get_next_move() is None:
+                        print('idz glowna sciezkom')
                         self.move_tree.add_main(the_move)
-                    elif self.move_tree.get_next_move() != the_move:
+                    elif self.move_tree.get_next_move() == the_move:
+                        self.move_tree.move_forward()
+                    elif self.move_tree.has_variant():
+                        variant = self.move_tree.get_variant()
+                        if variant.get_next_move() == the_move:
+                            self.move_tree = self.move_tree.move_down()
+                            self.move_tree.move_forward()
+
+                    else:
+                        print('zrup variant')
                         self.move_tree.add_variant(the_move, self.board.previous_board)
                         self.move_tree = self.move_tree.move_down()
-                    else:
-                        self.move_tree.move_forward()
+                    print("Move tree has variant:", self.move_tree.has_variant())
+                    print("Move tree:", self.move_tree.id)
                 
                 # self.moves_record.update_moves_record()
 
@@ -156,10 +167,17 @@ class GameFrame(QFrame):
                     self.board.previous_board = self.board.board.copy()
                     self.board.board.pop()
                     
-                    self.board.move_made = True
+                    # self.board.move_made = True
                     self.board.update_pieces(self.board.board)
                 else:
                     print('KONIEC WARIANTU')
+                    mama = self.move_tree.move_up()
+                    if mama:
+                        self.move_tree = mama 
+            else:
+                print('PUSTY MOVESTACK')
+            print(self.move_tree._current_move)
+
 
         elif event.key() == Qt.Key.Key_Right:
             popped_move = self.move_tree.move_forward()
