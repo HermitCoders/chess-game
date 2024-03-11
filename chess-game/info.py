@@ -7,12 +7,10 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
 )
 from PyQt6.QtGui import QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect
-from itertools import pairwise
+from PyQt6.QtCore import Qt, QRect, QObject, pyqtSignal
 import chess
 import chess.engine
 
-from board import ChessMoves
 from utils import sigmoid
 
 
@@ -35,23 +33,55 @@ class MovesRecord(QWidget):
 
         self.setStyleSheet("background-color: #363636")
 
+        # Main table formatting
         self.table_widget = MyQTableWidget()
-        self.table_widget.setFrameStyle(0)
-        self.table_widget.setColumnCount(3)
-        self.table_widget.verticalHeader().setVisible(False)
-        self.table_widget.verticalHeader().setDefaultSectionSize(35)
+        self.table_widget.setColumnCount(2)
+        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table_widget.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.table_widget.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectItems
+        )
+        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_widget.setStyleSheet(
+            """QTableWidget {border: 0px; gridline-color: #2e2e2e}
+            QTableWidget::item {background-color: #363636; color: #f6f6f6;}
+            QTableWidget::item:selected {background-color: #565656; color: #f6f6f6;}"""
+        )
 
+        # Vertical header formatting
+        self.table_widget.verticalHeader().setDefaultSectionSize(35)
+        self.table_widget.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Fixed
+        )
+        self.table_widget.verticalHeader().setFixedWidth(40)
+        self.table_widget.verticalHeader().setFont(QFont("Bahnschrift", 14))
+        self.table_widget.verticalHeader().setDefaultAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
+        )
+        self.table_widget.verticalHeader().setStyleSheet(
+            """QHeaderView::section {
+                background: #363636; 
+                color: #f6f6f6; 
+                border-top: 0px;
+                border-left: 0px;
+                border-right: 1px solid #2e2e2e;
+                border-bottom: 1px solid #2e2e2e;}"""
+        )
+        self.table_widget.verticalHeader().setHighlightSections(False)
+
+        # Horizontal header formatting
         self.table_widget.horizontalHeader().setVisible(False)
         self.table_widget.horizontalHeader().setDefaultSectionSize(120)
         self.table_widget.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
+            0, QHeaderView.ResizeMode.Fixed
         )
         self.table_widget.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Fixed
         )
-        self.table_widget.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Fixed
-        )
+
+        # Scroll bar formatting
         scroll_bar = self.table_widget.verticalScrollBar()
         scroll_bar.setStyleSheet(
             """QScrollBar:vertical {width: 10px; background: #363636; margin: 0px} 
@@ -61,10 +91,6 @@ class MovesRecord(QWidget):
         )
         self.table_widget.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn
-        )
-        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_widget.setStyleSheet(
-            "QTableWidget {outline: 0;} QTableWidget::item:selected{background: #565656;}"
         )
 
         vbox_layout = QVBoxLayout()
@@ -76,43 +102,15 @@ class MovesRecord(QWidget):
     def update_moves_record(self):
         if self.board_frame.move_made:
             last_move = self.board_frame.board.peek()
-            moved_piece = self.board_frame.pieces_items[last_move.to_square]
-            piece_symbol = str.upper(moved_piece.piece.symbol())
-            move_type: ChessMoves = self.board_frame.move_type
 
-            san_move: str = (
-                "" if piece_symbol == "P" or last_move.promotion else piece_symbol
-            ) + chess.SQUARE_NAMES[last_move.to_square]
+            san_move = self.board_frame.previous_board.san(last_move)
 
-            if move_type == ChessMoves.capture:
-                if piece_symbol == "P" or last_move.promotion:
-                    san_move = (
-                        chess.SQUARE_NAMES[last_move.from_square][:1]
-                        + move_type
-                        + san_move
-                    )
-                else:
-                    san_move = san_move[:1] + move_type + san_move[1:]
-            elif move_type in [ChessMoves.short_castle, ChessMoves.long_castle]:
-                san_move = move_type
-
-            if last_move.promotion:
-                san_move += "=Q"
-
-            if self.board_frame.board.is_checkmate():
-                san_move += "#"
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(self.board_frame.board.turn), "check"
-                )
-            elif self.board_frame.board.is_check():
-                san_move += "+"
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(self.board_frame.board.turn), "check"
-                )
+            if self.board_frame.board.is_check():
+                king_square = self.board_frame.board.king(self.board_frame.board.turn)
+                self.board_frame.set_square_style(king_square, "check")
+                self.board_frame.checked_squares.add(king_square)
             else:
-                self.board_frame.set_square_style(
-                    self.board_frame.board.king(1 - self.board_frame.board.turn)
-                )
+                self.board_frame.uncheck_all()
             # san_move += f" ({self.parent.evaluation_bar.evaluation})"
             self.moves_record.append(san_move)
             self.update_moves_display(san_move)
@@ -123,22 +121,14 @@ class MovesRecord(QWidget):
         move_num = (idx // 2) + 1
         self.table_widget.setRowCount(move_num)
 
-        move_num_item = QTableWidgetItem(str(move_num) + ".")
-        move_num_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.table_widget.setItem(idx // 2, 0, move_num_item)
-
         move_item = QTableWidgetItem(move)
         move_item.setTextAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
-        self.table_widget.setItem(idx // 2, 1 if idx % 2 == 0 else 2, move_item)
+        self.table_widget.setItem(idx // 2, 0 if idx % 2 == 0 else 1, move_item)
 
-        move_num_item.setForeground(QColor("#f6f6f6"))
         move_item.setForeground(QColor("#f6f6f6"))
-        move_num_item.setFont(QFont("Bahnschrift", 16))
-        move_item.setFont(QFont("Bahnschrift", 16))
+        move_item.setFont(QFont("Bahnschrift", 14))
         # Scroll to the last move
         self.table_widget.scrollToBottom()
 
@@ -217,10 +207,16 @@ class EngineLines(QWidget):
 
         self.setStyleSheet("background-color: #363636")
 
+        # Main table formatting
         self.table_widget = MyQTableWidget()
         self.table_widget.setFrameStyle(0)
         self.table_widget.setRowCount(3)
         self.table_widget.setColumnCount(2)
+        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
+        # Vertical header formatting
         self.table_widget.verticalHeader().setVisible(False)
         self.table_widget.verticalHeader().setDefaultSectionSize(30)
         self.table_widget.verticalHeader().setSectionResizeMode(
@@ -233,18 +229,15 @@ class EngineLines(QWidget):
             2, QHeaderView.ResizeMode.Fixed
         )
 
+        # Horizontal header formatting
         self.table_widget.horizontalHeader().setVisible(False)
-        # self.table_widget.horizontalHeader().setDefaultSectionSize(250)
+        self.table_widget.horizontalHeader().setDefaultSectionSize(40)
         self.table_widget.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
+            0, QHeaderView.ResizeMode.Fixed
         )
         self.table_widget.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
-
-        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         vbox_layout = QVBoxLayout()
         vbox_layout.addWidget(self.table_widget)
@@ -252,37 +245,17 @@ class EngineLines(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def map_line(self, line):
-        return [f"{m1.uci()} {m2.uci()}" for m1, m2 in pairwise(line)]
-
     def get_score_str(self, score):
         if score.score() is not None:
             score_str = str(round(score.score() / 100, 1))
         else:
             score_str = str(score.mate())
             score_str = (
-                ("M" + score_str)
+                ("-M" + score_str[1:])
                 if score_str.startswith("-")
-                else ("-M" + score_str[1:])
+                else ("M" + score_str)
             )
         return score_str
-
-    def get_line_str(self, line, move_num):
-        var_move_idx = move_num // 2 + 1
-        move_idx_str = f"{var_move_idx}... " if move_num % 2 else f"{var_move_idx}. "
-        line_str = move_idx_str + line[0].uci()
-
-        mapped_line = (
-            self.map_line(line[1:6]) if move_num % 2 else self.map_line(line[2:6])
-        )
-
-        if mapped_line:
-            if not move_num % 2:
-                line_str += str(" ") + line[1].uci()
-            line_str += "".join(
-                f"   {j+1}. {m}" for j, m in enumerate(mapped_line, var_move_idx)
-            )
-        return line_str
 
     def add_table_item(self, text, row, col, alignment):
         item = QTableWidgetItem(text)
@@ -291,7 +264,7 @@ class EngineLines(QWidget):
         item.setFont(QFont("Bahnschrift", 12))
         self.table_widget.setItem(row, col, item)
 
-    def update_engine_lines(self, evaluation, move_num):
+    def update_engine_lines(self, evaluation):
         self.table_widget.setColumnCount(2)
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()
@@ -306,7 +279,7 @@ class EngineLines(QWidget):
             line = eval_dict.get("pv", "")
             # Consider only lines longer than two moves unless its forced mate
             if len(line) > 2 or score.mate():
-                line_str = self.get_line_str(line, move_num)
+                line_str = self.board_frame.board.variation_san(line)
                 self.add_table_item(
                     line_str,
                     idx,
@@ -314,3 +287,17 @@ class EngineLines(QWidget):
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 )
         self.update()
+
+
+class ChessEngine(QObject):
+    evaluation_result = pyqtSignal(list)
+    
+    engine = chess.engine.SimpleEngine.popen_uci(
+        "stockfish/stockfish-windows-x86-64-avx2.exe"
+    )
+
+    def evaluate(self, board):
+        info = self.engine.analyse(
+            board, chess.engine.Limit(depth=16), multipv=5
+        )
+        self.evaluation_result.emit(info)
