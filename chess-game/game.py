@@ -125,7 +125,7 @@ class GameFrame(QFrame):
                                 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
-            self.import_pgn("./games/lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn")
+            self.import_pgn("./games/lichess_pgn_2022.11.18_Quadrogroth_vs_lichess_AI_level_5.gR0a1Wo0.pgn")
         elif event.key() == Qt.Key.Key_Left:
             if self.board.board.move_stack:
                 self.board.uncheck_all()
@@ -149,9 +149,9 @@ class GameFrame(QFrame):
         turns_num = (moves_num - 1) // 2
 
         if moves_num % 2 == 0:
-            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 + 2) 
+            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 + 1)
         else:
-            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2) 
+            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 - 1)
             
 
             
