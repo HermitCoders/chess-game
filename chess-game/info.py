@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
 )
 from PyQt6.QtGui import QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtCore import Qt, QRect, QObject, pyqtSignal
 import chess
 import chess.engine
 
@@ -287,3 +287,17 @@ class EngineLines(QWidget):
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 )
         self.update()
+
+
+class ChessEngine(QObject):
+    evaluation_result = pyqtSignal(list)
+    
+    engine = chess.engine.SimpleEngine.popen_uci(
+        "stockfish/stockfish-windows-x86-64-avx2.exe"
+    )
+
+    def evaluate(self, board):
+        info = self.engine.analyse(
+            board, chess.engine.Limit(depth=16), multipv=5
+        )
+        self.evaluation_result.emit(info)
