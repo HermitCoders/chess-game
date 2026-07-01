@@ -2,6 +2,9 @@ from PyQt6.QtWidgets import QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 import chess
+import os
+
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
 
 class PieceItem(QLabel):
@@ -18,9 +21,13 @@ class PieceItem(QLabel):
 
         # Store original piece image
         pixmap = QPixmap(
-            "./assets/pieces/{}{}.png".format(
-                "w" if self.piece.color else "b",
-                chess.piece_symbol(self.piece.piece_type),
+            os.path.join(
+                ASSETS_DIR,
+                "pieces",
+                "{}{}.png".format(
+                    "w" if self.piece.color else "b",
+                    chess.piece_symbol(self.piece.piece_type),
+                ),
             )
         )
         self.setObjectName(chess.piece_symbol(self.piece.piece_type))
