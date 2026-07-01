@@ -146,6 +146,11 @@ class MoveTree(MoveTreeABC):
         
         return " ".join(san)
     
+    def get_root(self) -> "MoveTree":
+        node = self
+        while node._parent is not None:
+            node = node._parent
+        return node
 
     def get_variant(self) -> MoveTreeABC:
         return self._alt_line.get(self._current_move)
@@ -161,3 +166,38 @@ class MoveTree(MoveTreeABC):
         for move in self._main_line[: self._current_move + 1]:
             board.push(move)
         return board
+
+    def render_outline(self, depth: int = 0) -> list:
+        """Render this node and its variations as a list of (depth, text)
+        lines, in the lichess/chess.com style: variations get their own
+        indented line(s), the parent line continues below.
+        """
+        lines = []
+        board = self._board.copy(stack=True)
+        buffer = []
+
+        def flush():
+            if buffer:
+                lines.append((depth, " ".join(buffer)))
+                buffer.clear()
+
+        for i, move in enumerate(self._main_line):
+            if board.turn == chess.WHITE:
+                buffer.append(f"{board.fullmove_number}. {board.san_and_push(move)}")
+            elif not buffer:
+                buffer.append(f"{board.fullmove_number}...{board.san_and_push(move)}")
+            else:
+                buffer.append(board.san_and_push(move))
+
+            variant = self._alt_line.get(i)
+            if variant:
+                flush()
+                lines.extend(variant.render_outline(depth + 1))
+
+        flush()
+
+        variant_before_first_move = self._alt_line.get(-1)
+        if variant_before_first_move:
+            lines.extend(variant_before_first_move.render_outline(depth + 1))
+
+        return lines

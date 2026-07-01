@@ -108,7 +108,7 @@ class GameFrame(QFrame):
                 self.board.board.push(move)
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
-                self.moves_record.update_moves_record()
+                self.moves_record.render_from_tree(self.move_tree)
 
                 QApplication.processEvents()
 
@@ -162,7 +162,7 @@ class GameFrame(QFrame):
                         self.move_tree = self.move_tree.move_down()
                     print("Move tree has variant:", self.move_tree.has_variant())
                     print("Move tree:", self.move_tree.id)
-                    self.moves_record.update_moves_record()
+                    self.moves_record.render_from_tree(self.move_tree)
                 
 
             self.board.previous_sq_idx = square_index
@@ -182,12 +182,14 @@ class GameFrame(QFrame):
                     
                     # self.board.move_made = True
                     self.board.update_pieces(self.board.board)
+                    self.moves_record.render_from_tree(self.move_tree)
                 else:
                     print('KONIEC WARIANTU')
                     mama = self.move_tree.move_up()
                     if mama:
                         self.move_tree = mama
                         self.sync_board_to_tree()
+                        self.moves_record.render_from_tree(self.move_tree)
             else:
                 print('PUSTY MOVESTACK')
             print(self.move_tree._current_move)
@@ -201,6 +203,7 @@ class GameFrame(QFrame):
                 self.board.board.push(popped_move)
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
+                self.moves_record.render_from_tree(self.move_tree)
         
         elif event.key() == Qt.Key.Key_Down:
             print("D")
@@ -209,6 +212,7 @@ class GameFrame(QFrame):
             if child:
                 self.move_tree = child
                 self.sync_board_to_tree()
+                self.moves_record.render_from_tree(self.move_tree)
         
         elif event.key() == Qt.Key.Key_Up:
             print("U")
@@ -216,14 +220,7 @@ class GameFrame(QFrame):
             if mama:
                 self.move_tree = mama 
                 self.sync_board_to_tree()
+                self.moves_record.render_from_tree(self.move_tree)
                 
         elif event.key() == Qt.Key.Key_E:
             self.thread.started.emit()
-        
-        moves_num = len(self.board.board.move_stack)
-        turns_num = (moves_num - 1) // 2
-
-        if moves_num % 2 == 0:
-            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 + 1)
-        else:
-            self.moves_record.table_widget.setCurrentCell(turns_num, moves_num % 2 - 1)
