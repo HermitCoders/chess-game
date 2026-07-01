@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHeaderView,
     QAbstractItemView,
+    QTextEdit,
 )
 from PyQt6.QtGui import QColor, QPainter, QFont
 from PyQt6.QtCore import Qt, QRect, QObject, pyqtSignal
@@ -29,108 +30,35 @@ class MovesRecord(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.board_frame = parent.board
-        self.moves_record = []
 
         self.setStyleSheet("background-color: #363636")
 
-        # Main table formatting
-        self.table_widget = MyQTableWidget()
-        self.table_widget.setColumnCount(2)
-        self.table_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table_widget.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFrameStyle(0)
+        self.text_edit.setStyleSheet(
+            "QTextEdit {background-color: #363636; color: #f6f6f6; border: 0px;}"
         )
-        self.table_widget.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectItems
-        )
-        self.table_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_widget.setStyleSheet(
-            """QTableWidget {border: 0px; gridline-color: #2e2e2e}
-            QTableWidget::item {background-color: #363636; color: #f6f6f6;}
-            QTableWidget::item:selected {background-color: #565656; color: #f6f6f6;}"""
-        )
-
-        # Vertical header formatting
-        self.table_widget.verticalHeader().setDefaultSectionSize(35)
-        self.table_widget.verticalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Fixed
-        )
-        self.table_widget.verticalHeader().setFixedWidth(40)
-        self.table_widget.verticalHeader().setFont(QFont("Menlo", 14))
-        self.table_widget.verticalHeader().setDefaultAlignment(
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
-        )
-        self.table_widget.verticalHeader().setStyleSheet(
-            """QHeaderView::section {
-                background: #363636; 
-                color: #f6f6f6; 
-                border-top: 0px;
-                border-left: 0px;
-                border-right: 1px solid #2e2e2e;
-                border-bottom: 1px solid #2e2e2e;}"""
-        )
-        self.table_widget.verticalHeader().setHighlightSections(False)
-
-        # Horizontal header formatting
-        self.table_widget.horizontalHeader().setVisible(False)
-        self.table_widget.horizontalHeader().setDefaultSectionSize(120)
-        self.table_widget.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Fixed
-        )
-        self.table_widget.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Fixed
-        )
-
-        # Scroll bar formatting
-        scroll_bar = self.table_widget.verticalScrollBar()
-        scroll_bar.setStyleSheet(
-            """QScrollBar:vertical {width: 10px; background: #363636; margin: 0px} 
-            QScrollBar::sub-page:vertical {background: #363636;}
-            QScrollBar::add-page:vertical {background: #363636;}
-            QScrollBar::handle:vertical {background: #565656;}"""
-        )
-        self.table_widget.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOn
-        )
+        self.text_edit.setFont(QFont("Menlo", 14))
 
         vbox_layout = QVBoxLayout()
-        vbox_layout.addWidget(self.table_widget)
+        vbox_layout.addWidget(self.text_edit)
         vbox_layout.setSpacing(0)
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def update_moves_record(self):
-        if self.board_frame.move_made:
-            last_move = self.board_frame.board.peek()
-
-            san_move = self.board_frame.previous_board.san(last_move)
-
-            if self.board_frame.board.is_check():
-                king_square = self.board_frame.board.king(self.board_frame.board.turn)
-                self.board_frame.set_square_style(king_square, "check")
-                self.board_frame.checked_squares.add(king_square)
-            else:
-                self.board_frame.uncheck_all()
-            # san_move += f" ({self.parent.evaluation_bar.evaluation})"
-            self.moves_record.append(san_move)
-            self.update_moves_display(san_move)
-
-    def update_moves_display(self, move):
-        idx = self.board_frame.board.ply() - 1
-
-        move_num = (idx // 2) + 1
-        self.table_widget.setRowCount(move_num)
-
-        move_item = QTableWidgetItem(move)
-        move_item.setTextAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    def render_from_tree(self, move_tree):
+        lines = move_tree.get_root().render_outline()
+        html_lines = []
+        for depth, text in lines:
+            margin = depth * 20
+            html_lines.append(
+                f'<div style="margin-left: {margin}px;">{text}</div>'
+            )
+        self.text_edit.setHtml("".join(html_lines))
+        self.text_edit.verticalScrollBar().setValue(
+            self.text_edit.verticalScrollBar().maximum()
         )
-        self.table_widget.setItem(idx // 2, 0 if idx % 2 == 0 else 1, move_item)
-
-        move_item.setForeground(QColor("#f6f6f6"))
-        move_item.setFont(QFont("Menlo", 14))
-        # Scroll to the last move
-        self.table_widget.scrollToBottom()
 
 
 class EvaluationBar(QWidget):
