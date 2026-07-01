@@ -11,10 +11,13 @@ from PyQt6.QtCore import Qt, QRect, QThread
 import chess
 import chess.engine
 import chess.pgn
+import os
 
 from board import ChessBoard
 from info import MovesRecord, EvaluationBar, EngineLines, ChessEngine
 from move_tree import MoveTree
+
+GAMES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "games")
 
 
 class GameFrame(QFrame):
@@ -158,7 +161,7 @@ class GameFrame(QFrame):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
-            self.import_pgn("./games/TALHAA79_vs_SzachowySmoluch_2024.03.01.pgn")
+            self.import_pgn(os.path.join(GAMES_DIR, "TALHAA79_vs_SzachowySmoluch_2024.03.01.pgn"))
 
         if event.key() == Qt.Key.Key_Left:
             if self.board.board.move_stack:

@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.stack)
         self.setWindowTitle("Chess")
-        self.setMinimumSize(820, 820)
+        self.adjustSize()
         self.show()
 
     def closeEvent(self, event: QCloseEvent):

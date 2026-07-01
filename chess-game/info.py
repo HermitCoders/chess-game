@@ -56,7 +56,7 @@ class MovesRecord(QWidget):
             QHeaderView.ResizeMode.Fixed
         )
         self.table_widget.verticalHeader().setFixedWidth(40)
-        self.table_widget.verticalHeader().setFont(QFont("Bahnschrift", 14))
+        self.table_widget.verticalHeader().setFont(QFont("Menlo", 14))
         self.table_widget.verticalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
         )
@@ -128,7 +128,7 @@ class MovesRecord(QWidget):
         self.table_widget.setItem(idx // 2, 0 if idx % 2 == 0 else 1, move_item)
 
         move_item.setForeground(QColor("#f6f6f6"))
-        move_item.setFont(QFont("Bahnschrift", 14))
+        move_item.setFont(QFont("Menlo", 14))
         # Scroll to the last move
         self.table_widget.scrollToBottom()
 
@@ -168,7 +168,7 @@ class EvaluationBar(QWidget):
         painter.fillRect(white_rect, Qt.GlobalColor.white)
         painter.fillRect(black_rect, Qt.GlobalColor.black)
 
-        painter.setFont(QFont("Bahnschrift", 12))
+        painter.setFont(QFont("Menlo", 12))
 
         if bar_height >= 0.5:
             painter.setPen(QColor("black"))
@@ -261,7 +261,7 @@ class EngineLines(QWidget):
         item = QTableWidgetItem(text)
         item.setTextAlignment(alignment)
         item.setForeground(QColor("#f6f6f6"))
-        item.setFont(QFont("Bahnschrift", 12))
+        item.setFont(QFont("Menlo", 12))
         self.table_widget.setItem(row, col, item)
 
     def update_engine_lines(self, evaluation):
@@ -293,7 +293,7 @@ class ChessEngine(QObject):
     evaluation_result = pyqtSignal(list)
     
     engine = chess.engine.SimpleEngine.popen_uci(
-        "stockfish/stockfish-windows-x86-64-avx2.exe"
+        "/opt/homebrew/bin/stockfish"
     )
 
     def evaluate(self, board):
