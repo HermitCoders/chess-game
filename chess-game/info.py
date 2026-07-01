@@ -6,11 +6,13 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
     QTextEdit,
+    QTextBrowser,
 )
 from PyQt6.QtGui import QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QObject, QEvent, pyqtSignal
 import chess
 import chess.engine
+import re
 
 from utils import sigmoid
 
@@ -25,21 +27,30 @@ class MyQTableWidget(QTableWidget):
         current_value = self.verticalScrollBar().value()
         self.verticalScrollBar().setValue(current_value - delta)
 
+class MovesBrowser(QTextBrowser):
+    pass
+
 
 class MovesRecord(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.board_frame = parent.board
+        self.on_move_clicked = None
+        self._targets = {}
+        self._lines = []
+        self._active_anchor = None
 
         self.setStyleSheet("background-color: #363636")
 
-        self.text_edit = QTextEdit()
+        self.text_edit = MovesBrowser()
+        self.text_edit.setOpenLinks(False)
         self.text_edit.setReadOnly(True)
         self.text_edit.setFrameStyle(0)
         self.text_edit.setStyleSheet(
-            "QTextEdit {background-color: #363636; color: #f6f6f6; border: 0px;}"
+            "QTextBrowser {background-color: #363636; color: #f6f6f6; border: 0px;}"
         )
         self.text_edit.setFont(QFont("Menlo", 14))
+        self.text_edit.anchorClicked.connect(self._on_anchor_clicked)
 
         vbox_layout = QVBoxLayout()
         vbox_layout.addWidget(self.text_edit)
@@ -48,18 +59,42 @@ class MovesRecord(QWidget):
         self.setLayout(vbox_layout)
 
     def render_from_tree(self, move_tree):
-        lines = move_tree.get_root().render_outline()
+        self._targets = {}
+        self._lines = move_tree.get_root().render_outline(self._targets)
+
+        self._active_anchor = None
+        if move_tree._current_move >= 0:
+            for anchor_id, (node, idx) in self._targets.items():
+                if node is move_tree and idx == move_tree._current_move:
+                    self._active_anchor = anchor_id
+                    break
+
         html_lines = []
-        for depth, text in lines:
+        for depth, html in self._lines:
             margin = depth * 20
-            html_lines.append(
-                f'<div style="margin-left: {margin}px;">{text}</div>'
+            styled_html = re.sub(
+                r'href="(\d+)" style="[^"]*"',
+                lambda m: f'href="{m.group(1)}" style="{self._style_for(m.group(1))}"',
+                html,
             )
+            html_lines.append(f'<div style="margin-left: {margin}px;">{styled_html}</div>')
         self.text_edit.setHtml("".join(html_lines))
         self.text_edit.verticalScrollBar().setValue(
             self.text_edit.verticalScrollBar().maximum()
         )
 
+    def _style_for(self, anchor_id):
+        styles = ["color:#f6f6f6", "text-decoration:none", "padding:1px 3px", "border-radius:3px"]
+        if anchor_id == self._active_anchor:
+            styles += ["background-color:#0f6e56", "color:#eafff6"]
+        return ";".join(styles)
+
+    def _on_anchor_clicked(self, url):
+        anchor_id = url.toString()
+        target = self._targets.get(anchor_id)
+        if target and self.on_move_clicked:
+            node, move_index = target
+            self.on_move_clicked(node, move_index)
 
 class EvaluationBar(QWidget):
     def __init__(self, parent):

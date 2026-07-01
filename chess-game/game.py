@@ -41,6 +41,7 @@ class GameFrame(QFrame):
 
         self.moves_record = MovesRecord(self)
         self.moves_record.setFixedSize(300, 700)
+        self.moves_record.on_move_clicked = self.jump_to_move
         
         self.move_tree: MoveTree = MoveTree(self.board.board)
 
@@ -121,6 +122,13 @@ class GameFrame(QFrame):
         self.board.board = self.move_tree.get_board()
         self.board.uncheck_all()
         self.board.update_pieces(self.board.board)
+    
+    def jump_to_move(self, node, move_index):
+        node._current_move = move_index
+        node.select_path_to_root()
+        self.move_tree = node
+        self.sync_board_to_tree()
+        self.moves_record.render_from_tree(self.move_tree)
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -144,24 +152,25 @@ class GameFrame(QFrame):
                 self.board.move_piece(square_index)
                 if self.board.move_made:
                     the_move = self.board.board.peek()
-                    print(f"Move: {the_move},   Next move: {self.move_tree.get_next_move()}")
                     if self.move_tree.get_next_move() is None:
-                        print('idz glowna sciezkom')
                         self.move_tree.add_main(the_move)
                     elif self.move_tree.get_next_move() == the_move:
                         self.move_tree.move_forward()
-                    elif self.move_tree.has_variant():
-                        variant = self.move_tree.get_variant()
-                        if variant.get_current_move() == the_move:
+                    else:
+                        matched_index = None
+                        for i, sibling in enumerate(self.move_tree.get_variants()):
+                            if sibling.get_current_move() == the_move:
+                                matched_index = i
+                                break
+
+                        if matched_index is not None:
+                            self.move_tree.select_variant(matched_index)
                             self.move_tree = self.move_tree.move_down()
                             self.sync_board_to_tree()
+                        else:
+                            self.move_tree.add_variant(the_move, self.board.previous_board)
+                            self.move_tree = self.move_tree.move_down()
 
-                    else:
-                        print('zrup variant')
-                        self.move_tree.add_variant(the_move, self.board.previous_board)
-                        self.move_tree = self.move_tree.move_down()
-                    print("Move tree has variant:", self.move_tree.has_variant())
-                    print("Move tree:", self.move_tree.id)
                     self.moves_record.render_from_tree(self.move_tree)
                 
 
@@ -179,9 +188,13 @@ class GameFrame(QFrame):
                     self.board.uncheck_all()
                     self.board.previous_board = self.board.board.copy()
                     self.board.board.pop()
-                    
-                    # self.board.move_made = True
                     self.board.update_pieces(self.board.board)
+
+                    if self.move_tree._current_move == -1:
+                        parent = self.move_tree.move_up()
+                        if parent:
+                            self.move_tree = parent
+
                     self.moves_record.render_from_tree(self.move_tree)
                 else:
                     print('KONIEC WARIANTU')
@@ -207,9 +220,9 @@ class GameFrame(QFrame):
         
         elif event.key() == Qt.Key.Key_Down:
             print("D")
-            print(self.move_tree.get_string_repr())
             child = self.move_tree.move_down()
             if child:
+                child._current_move = 0
                 self.move_tree = child
                 self.sync_board_to_tree()
                 self.moves_record.render_from_tree(self.move_tree)
