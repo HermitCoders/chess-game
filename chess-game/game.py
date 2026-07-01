@@ -111,7 +111,17 @@ class GameFrame(QFrame):
                 self.moves_record.update_moves_record()
 
                 QApplication.processEvents()
-                
+
+    def sync_board_to_tree(self):
+        """Rebuild the physical board to match wherever self.move_tree
+        currently points. Needed after move_up()/move_down(), since those
+        only swap which tree node is "current" without touching the board.
+        """
+        self.board.previous_board = self.board.board.copy()
+        self.board.board = self.move_tree.get_board()
+        self.board.uncheck_all()
+        self.board.update_pieces(self.board.board)
+
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
 
@@ -142,9 +152,9 @@ class GameFrame(QFrame):
                         self.move_tree.move_forward()
                     elif self.move_tree.has_variant():
                         variant = self.move_tree.get_variant()
-                        if variant.get_next_move() == the_move:
+                        if variant.get_current_move() == the_move:
                             self.move_tree = self.move_tree.move_down()
-                            self.move_tree.move_forward()
+                            self.sync_board_to_tree()
 
                     else:
                         print('zrup variant')
@@ -176,7 +186,8 @@ class GameFrame(QFrame):
                     print('KONIEC WARIANTU')
                     mama = self.move_tree.move_up()
                     if mama:
-                        self.move_tree = mama 
+                        self.move_tree = mama
+                        self.sync_board_to_tree()
             else:
                 print('PUSTY MOVESTACK')
             print(self.move_tree._current_move)
@@ -194,12 +205,17 @@ class GameFrame(QFrame):
         elif event.key() == Qt.Key.Key_Down:
             print("D")
             print(self.move_tree.get_string_repr())
+            child = self.move_tree.move_down()
+            if child:
+                self.move_tree = child
+                self.sync_board_to_tree()
         
         elif event.key() == Qt.Key.Key_Up:
             print("U")
             mama = self.move_tree.move_up()
             if mama:
                 self.move_tree = mama 
+                self.sync_board_to_tree()
                 
         elif event.key() == Qt.Key.Key_E:
             self.thread.started.emit()

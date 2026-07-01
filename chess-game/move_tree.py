@@ -149,3 +149,15 @@ class MoveTree(MoveTreeABC):
 
     def get_variant(self) -> MoveTreeABC:
         return self._alt_line.get(self._current_move)
+    
+    def get_board(self) -> chess.Board:
+        """Reconstruct the actual board position for this node.
+
+        Starts from this node's stored base position (the board as it was
+        when this line/variation began) and replays its own main line up
+        to (and including) the current move pointer.
+        """
+        board = self._board.copy()
+        for move in self._main_line[: self._current_move + 1]:
+            board.push(move)
+        return board
