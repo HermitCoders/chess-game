@@ -162,8 +162,8 @@ class GameFrame(QFrame):
                         self.move_tree = self.move_tree.move_down()
                     print("Move tree has variant:", self.move_tree.has_variant())
                     print("Move tree:", self.move_tree.id)
+                    self.moves_record.update_moves_record()
                 
-                # self.moves_record.update_moves_record()
 
             self.board.previous_sq_idx = square_index
         else:
