@@ -16,6 +16,36 @@ import re
 
 from utils import sigmoid
 
+import os
+import shutil
+
+
+def find_engine_path() -> str:
+    """Resolve the UCI engine executable path.
+
+    Resolution order:
+    1. CHESS_ENGINE_PATH environment variable (explicit override).
+    2. A "stockfish" binary discoverable on PATH.
+    3. Raise a clear, actionable error instead of crashing on import.
+    """
+    env_path = os.environ.get("CHESS_ENGINE_PATH")
+    if env_path:
+        if os.path.isfile(env_path):
+            return env_path
+        raise FileNotFoundError(
+            f"CHESS_ENGINE_PATH is set to '{env_path}' but no file exists there."
+        )
+
+    found = shutil.which("stockfish")
+    if found:
+        return found
+
+    raise FileNotFoundError(
+        "Could not locate a Stockfish executable. Install Stockfish and make "
+        "sure it is on your PATH, or set the CHESS_ENGINE_PATH environment "
+        "variable to point at the executable."
+    )
+
 
 class MyQTableWidget(QTableWidget):
     def __init__(self):
@@ -250,6 +280,7 @@ class EngineLines(QWidget):
 
     def update_engine_lines(self, evaluation, board):
         self.table_widget.setColumnCount(2)
+        self.table_widget.clearContents()
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()
             score_str = self.get_score_str(score)
@@ -272,12 +303,15 @@ class EngineLines(QWidget):
                 )
         self.update()
 
+
 class ChessEngine(QObject):
     evaluation_result = pyqtSignal(object, list)
 
-    engine = chess.engine.SimpleEngine.popen_uci(
-        "/opt/homebrew/bin/stockfish"
-    )
+    def __init__(self, engine_path: str = None):
+        super().__init__()
+        self.engine = chess.engine.SimpleEngine.popen_uci(
+            engine_path or find_engine_path()
+        )
 
     def evaluate(self, board):
         info = self.engine.analyse(

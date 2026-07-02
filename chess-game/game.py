@@ -12,6 +12,9 @@ import chess
 import chess.engine
 import chess.pgn
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from board import ChessBoard
 from info import MovesRecord, EvaluationBar, EngineLines, ChessEngine
@@ -222,7 +225,7 @@ class GameFrame(QFrame):
 
             self.board.previous_sq_idx = square_index
         else:
-            print("Mouse click is outside the frame's visible area")
+            logger.debug("Mouse click is outside the frame's visible area")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
@@ -244,7 +247,7 @@ class GameFrame(QFrame):
                     self.moves_record.render_from_tree(self.move_tree)
                     self.request_eval()
                 else:
-                    print('KONIEC WARIANTU')
+                    logger.debug("End of variation, moving up to parent line")
                     mama = self.move_tree.move_up()
                     if mama:
                         self.move_tree = mama
@@ -252,8 +255,7 @@ class GameFrame(QFrame):
                         self.moves_record.render_from_tree(self.move_tree)
                         self.request_eval()
             else:
-                print('PUSTY MOVESTACK')
-            print(self.move_tree._current_move)
+                logger.debug("Move stack is empty, nothing to go back to")
 
 
         elif event.key() == Qt.Key.Key_Right:
@@ -268,7 +270,6 @@ class GameFrame(QFrame):
                 self.request_eval()
         
         elif event.key() == Qt.Key.Key_Down:
-            print("D")
             child = self.move_tree.move_down()
             if child:
                 child._current_move = 0
@@ -278,7 +279,6 @@ class GameFrame(QFrame):
                 self.request_eval()
         
         elif event.key() == Qt.Key.Key_Up:
-            print("U")
             mama = self.move_tree.move_up()
             if mama:
                 self.move_tree = mama 
