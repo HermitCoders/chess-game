@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QTextBrowser,
 )
-from PyQt6.QtGui import QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect, QObject, QEvent, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor
+from PyQt6.QtCore import Qt, QRect, QObject, QEvent, QTimer, pyqtSignal
 import chess
 import chess.engine
 import re
@@ -79,10 +79,31 @@ class MovesRecord(QWidget):
             )
             html_lines.append(f'<div style="margin-left: {margin}px;">{styled_html}</div>')
         self.text_edit.setHtml("".join(html_lines))
-        self.text_edit.verticalScrollBar().setValue(
-            self.text_edit.verticalScrollBar().maximum()
-        )
+        self._scroll_to_active()
 
+    def _scroll_to_active(self):
+        if self._active_anchor is None:
+            self.text_edit.verticalScrollBar().setValue(0)
+            return
+
+        doc = self.text_edit.document()
+        block = doc.begin()
+        found = False
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                fmt = frag.charFormat()
+                if fmt.isAnchor() and self._active_anchor in fmt.anchorNames():
+                    found = True
+                    cursor = QTextCursor(doc)
+                    cursor.setPosition(frag.position())
+                    self.text_edit.setTextCursor(cursor)
+                    self.text_edit.ensureCursorVisible()
+                    return
+                it += 1
+            block = block.next()
+    
     def _style_for(self, anchor_id):
         styles = ["color:#f6f6f6", "text-decoration:none", "padding:1px 3px", "border-radius:3px"]
         if anchor_id == self._active_anchor:

@@ -189,7 +189,7 @@ class MoveTree(MoveTreeABC):
         def make_anchor(node, move_index, san):
             anchor_id = str(len(targets))
             targets[anchor_id] = (node, move_index)
-            return f'<a href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
+            return f'<a name="{anchor_id}" href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
 
         for i, move in enumerate(self._main_line):
             turn_is_white = board.turn == chess.WHITE

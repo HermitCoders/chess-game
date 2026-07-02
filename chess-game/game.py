@@ -113,22 +113,49 @@ class GameFrame(QFrame):
                 self._eval_pending = False
                 self.request_eval()
 
+    def _import_variations(self, pgn_node, tree_node):
+        """Recursively walk a python-chess GameNode tree and rebuild it
+        as our own MoveTree, preserving every variation from the PGN
+        file (not just the mainline)."""
+        variations = pgn_node.variations
+        if not variations:
+            return
+
+        # Sidelines must be added while tree_node's current position
+        # still matches pgn_node (i.e. before the mainline move below
+        # advances it), since add_variant keys off the current position.
+        sideline_children = []
+        for child in variations[1:]:
+            board_before = pgn_node.board()
+            tree_node.add_variant(child.move, board_before)
+            sideline_children.append((child, tree_node.get_variant()))
+
+        mainline_child = variations[0]
+        tree_node.add_main(mainline_child.move)
+
+        for child, variant_node in sideline_children:
+            self._import_variations(child, variant_node)
+
+        self._import_variations(mainline_child, tree_node)
+
     def import_pgn(self, pgn_path):
         with open(pgn_path) as pgn:
             game = chess.pgn.read_game(pgn)
-            self.board.board = game.board()
-            for move in game.mainline_moves():
-                self.move_tree.add_main(move)
 
-                self.board.previous_board = self.board.board.copy()
+        if game is None:
+            print(f"Could not read a game from {pgn_path}")
+            return
 
-                self.board.board.push(move)
-                self.board.move_made = True
-                self.board.update_pieces(self.board.board)
-                self.moves_record.render_from_tree(self.move_tree)
+        self.board.board = game.board()
+        self.move_tree = MoveTree(self.board.board)
+        self._import_variations(game, self.move_tree)
 
-                QApplication.processEvents()
-            self.request_eval()
+        if self.move_tree._main_line:
+            self.move_tree._current_move = len(self.move_tree._main_line) - 1
+
+        self.sync_board_to_tree()
+        self.moves_record.render_from_tree(self.move_tree)
+        self.request_eval()
 
     def sync_board_to_tree(self):
         """Rebuild the physical board to match wherever self.move_tree
@@ -199,7 +226,7 @@ class GameFrame(QFrame):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
-            self.import_pgn(os.path.join(GAMES_DIR, "TALHAA79_vs_SzachowySmoluch_2024.03.01.pgn"))
+            self.import_pgn(os.path.join(GAMES_DIR, "lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn"))
 
         if event.key() == Qt.Key.Key_Left:
             if self.board.board.move_stack:
