@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHeaderView,
     QAbstractItemView,
-    QTextEdit,
     QTextBrowser,
 )
 from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor
@@ -18,6 +17,9 @@ from utils import sigmoid
 
 import os
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def find_engine_path() -> str:
@@ -67,7 +69,6 @@ class MovesRecord(QWidget):
         self.board_frame = parent.board
         self.on_move_clicked = None
         self._targets = {}
-        self._lines = []
         self._active_anchor = None
 
         self.setStyleSheet("background-color: #363636")
@@ -356,7 +357,14 @@ class ChessEngine(QObject):
         )
 
     def evaluate(self, board):
-        info = self.engine.analyse(
-            board, chess.engine.Limit(depth=16), multipv=5
-        )
+        try:
+            info = self.engine.analyse(
+                board, chess.engine.Limit(depth=16), multipv=5
+            )
+        except chess.engine.EngineTerminatedError:
+            logger.error("Stockfish process terminated unexpectedly during analysis")
+            return
+        except chess.engine.EngineError as e:
+            logger.error("Stockfish engine error during analysis: %s", e)
+            return
         self.evaluation_result.emit(board, info)

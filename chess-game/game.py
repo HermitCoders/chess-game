@@ -31,8 +31,6 @@ class GameFrame(QFrame):
         super().__init__(parent)
 
         self.parent = parent
-        # self.engine = engine
-        self.popped_moves = []
 
         self.setStyleSheet("background-color: #262626")
 
@@ -158,8 +156,7 @@ class GameFrame(QFrame):
             self.move_tree._current_move = len(self.move_tree._main_line) - 1
 
         self.sync_board_to_tree()
-        self.moves_record.render_from_tree(self.move_tree)
-        self.request_eval()
+        self._on_position_changed()
 
     def sync_board_to_tree(self):
         """Rebuild the physical board to match wherever self.move_tree
@@ -171,13 +168,19 @@ class GameFrame(QFrame):
         self.board.uncheck_all()
         self.board.update_pieces(self.board.board)
     
+    def _on_position_changed(self):
+        """Call after self.move_tree changes (a move was made, or we
+        navigated/jumped elsewhere in the tree) to keep the moves
+        panel and engine evaluation in sync with the new position."""
+        self.moves_record.render_from_tree(self.move_tree)
+        self.request_eval()
+    
     def jump_to_move(self, node, move_index):
         node._current_move = move_index
         node.select_path_to_root()
         self.move_tree = node
         self.sync_board_to_tree()
-        self.moves_record.render_from_tree(self.move_tree)
-        self.request_eval()
+        self._on_position_changed()
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -220,8 +223,7 @@ class GameFrame(QFrame):
                             self.move_tree.add_variant(the_move, self.board.previous_board)
                             self.move_tree = self.move_tree.move_down()
 
-                    self.moves_record.render_from_tree(self.move_tree)
-                    self.request_eval()
+                    self._on_position_changed()
                 
 
             self.board.previous_sq_idx = square_index
@@ -249,16 +251,14 @@ class GameFrame(QFrame):
                         if parent:
                             self.move_tree = parent
 
-                    self.moves_record.render_from_tree(self.move_tree)
-                    self.request_eval()
+                    self._on_position_changed()
                 else:
                     logger.debug("End of variation, moving up to parent line")
                     mama = self.move_tree.move_up()
                     if mama:
                         self.move_tree = mama
                         self.sync_board_to_tree()
-                        self.moves_record.render_from_tree(self.move_tree)
-                        self.request_eval()
+                        self._on_position_changed()
             else:
                 logger.debug("Move stack is empty, nothing to go back to")
 
@@ -271,8 +271,7 @@ class GameFrame(QFrame):
                 self.board.board.push(popped_move)
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
-                self.moves_record.render_from_tree(self.move_tree)
-                self.request_eval()
+                self._on_position_changed()
         
         elif event.key() == Qt.Key.Key_Down:
             child = self.move_tree.move_down()
@@ -280,16 +279,14 @@ class GameFrame(QFrame):
                 child._current_move = 0
                 self.move_tree = child
                 self.sync_board_to_tree()
-                self.moves_record.render_from_tree(self.move_tree)
-                self.request_eval()
+                self._on_position_changed()
         
         elif event.key() == Qt.Key.Key_Up:
             mama = self.move_tree.move_up()
             if mama:
                 self.move_tree = mama 
                 self.sync_board_to_tree()
-                self.moves_record.render_from_tree(self.move_tree)
-                self.request_eval()
+                self._on_position_changed()
                 
         elif event.key() == Qt.Key.Key_E:
             self.request_eval()
