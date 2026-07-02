@@ -3,6 +3,7 @@ from collections import defaultdict
 import chess
 
 from piece import PieceItem
+from promotion_dialog import PromotionDialog
 
 
 class ChessBoard(QFrame):
@@ -152,7 +153,11 @@ class ChessBoard(QFrame):
                 self.previous_sq_idx in self.possible_promotions.keys()
                 and square_index in self.possible_promotions[self.previous_sq_idx]
             ):
-                move = chess.Move(self.previous_sq_idx, square_index, promotion=5)
+                dialog = PromotionDialog(self.board.turn, self)
+                dialog.exec()
+                move = chess.Move(
+                    self.previous_sq_idx, square_index, promotion=dialog.selected_piece
+                )
             else:
                 move = chess.Move(self.previous_sq_idx, square_index)
             self.previous_board = self.board.copy()
