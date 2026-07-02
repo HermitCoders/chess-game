@@ -73,6 +73,10 @@ class MoveTreeABC(ABC):
     def render_outline(self, targets: dict, depth: int = 0) -> list:
         pass
 
+    @abstractmethod
+    def render_table(self, targets: dict) -> list:
+        pass
+
 
 class MoveTree(MoveTreeABC):
     def __init__(self, board: chess.Board, parent=None, id: int = 0) -> None:
@@ -239,3 +243,66 @@ class MoveTree(MoveTreeABC):
             lines.extend(sibling.render_outline(targets, depth + 1))
 
         return lines
+
+    def render_table(self, targets: dict) -> list:
+        """Render this node's own main line as chess.com/lichess-style
+        rows: (move_number, White cell, Black cell). Variations
+        branching off are rendered using the existing render_outline()
+        and inserted as a full-width row directly beneath the row they
+        branch from, rather than being spliced mid-row.
+        """
+        rows = []
+        board = self._board.copy(stack=True)
+        current_row = None
+
+        def make_anchor(move_index, san):
+            anchor_id = str(len(targets))
+            targets[anchor_id] = (self, move_index)
+            return f'<a name="{anchor_id}" href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
+
+        def flush_row():
+            nonlocal current_row
+            if current_row is not None:
+                rows.append(current_row)
+                current_row = None
+
+        for i, move in enumerate(self._main_line):
+            turn_is_white = board.turn == chess.WHITE
+            fullmove_number = board.fullmove_number
+            san = board.san_and_push(move)
+            move_html = make_anchor(i, san)
+
+            if turn_is_white:
+                flush_row()
+                current_row = {
+                    "type": "row",
+                    "move_number": fullmove_number,
+                    "white": move_html,
+                    "black": None,
+                }
+            else:
+                if current_row is None:
+                    current_row = {
+                        "type": "row",
+                        "move_number": fullmove_number,
+                        "white": None,
+                        "black": None,
+                    }
+                current_row["black"] = move_html
+
+            siblings = self._alt_line.get(i, [])
+            if siblings:
+                flush_row()
+                for sibling in siblings:
+                    rows.append(
+                        {"type": "variation", "lines": sibling.render_outline(targets, depth=0)}
+                    )
+
+        flush_row()
+
+        for sibling in self._alt_line.get(-1, []):
+            rows.append(
+                {"type": "variation", "lines": sibling.render_outline(targets, depth=0)}
+            )
+
+        return rows

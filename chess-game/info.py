@@ -90,7 +90,7 @@ class MovesRecord(QWidget):
 
     def render_from_tree(self, move_tree):
         self._targets = {}
-        self._lines = move_tree.get_root().render_outline(self._targets)
+        rows = move_tree.get_root().render_table(self._targets)
 
         self._active_anchor = None
         if move_tree._current_move >= 0:
@@ -99,16 +99,35 @@ class MovesRecord(QWidget):
                     self._active_anchor = anchor_id
                     break
 
-        html_lines = []
-        for depth, html in self._lines:
-            margin = depth * 20
-            styled_html = re.sub(
+        def style(html):
+            if html is None:
+                return "&nbsp;"
+            return re.sub(
                 r'href="(\d+)" style="[^"]*"',
                 lambda m: f'href="{m.group(1)}" style="{self._style_for(m.group(1))}"',
                 html,
             )
-            html_lines.append(f'<div style="margin-left: {margin}px;">{styled_html}</div>')
-        self.text_edit.setHtml("".join(html_lines))
+
+        html_parts = ['<table width="100%" style="border-collapse: collapse;">']
+        for row in rows:
+            if row["type"] == "row":
+                html_parts.append(
+                    '<tr>'
+                    f'<td width="40" style="color:#8a8a8a; padding: 2px 4px; white-space: nowrap;">{row["move_number"]}.</td>'
+                    f'<td width="120" style="padding: 2px 4px;">{style(row["white"])}</td>'
+                    f'<td width="120" style="padding: 2px 4px;">{style(row["black"])}</td>'
+                    '</tr>'
+                )
+            else:  # variation
+                variation_html = " ".join(style(html) for depth, html in row["lines"])
+                html_parts.append(
+                    '<tr>'
+                    f'<td></td><td colspan="2" style="color:#9a9a9a; padding: 2px 4px 2px 20px;">{variation_html}</td>'
+                    '</tr>'
+                )
+        html_parts.append("</table>")
+
+        self.text_edit.setHtml("".join(html_parts))
         self._scroll_to_active()
 
     def _scroll_to_active(self):
