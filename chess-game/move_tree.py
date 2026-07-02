@@ -26,11 +26,23 @@ class MoveTreeABC(ABC):
         pass
 
     @abstractmethod
-    def add_variant(self, move: chess.Move) -> None:
+    def add_variant(self, move: chess.Move, board: chess.Board) -> None:
+        pass
+
+    @abstractmethod
+    def get_variants(self) -> List["MoveTree"]:
         pass
 
     @abstractmethod
     def has_variant(self) -> bool:
+        pass
+
+    @abstractmethod
+    def select_variant(self, sibling_index: int) -> None:
+        pass
+
+    @abstractmethod
+    def select_path_to_root(self) -> None:
         pass
 
     @abstractmethod
@@ -49,11 +61,23 @@ class MoveTreeABC(ABC):
     def get_variant(self) -> MoveTreeABC:
         pass
 
+    @abstractmethod
+    def get_root(self) -> "MoveTree":
+        pass
+
+    @abstractmethod
+    def get_board(self) -> chess.Board:
+        pass
+
+    @abstractmethod
+    def render_outline(self, targets: dict, depth: int = 0) -> list:
+        pass
+
 
 class MoveTree(MoveTreeABC):
     def __init__(self, board: chess.Board, parent=None, id: int = 0) -> None:
         self._parent: MoveTree = parent
-        self._main_line: List[chess.Move] = []  # lewo prawo szczala
+        self._main_line: List[chess.Move] = []  # moves along this line (left/right navigation)
         self._alt_line: Dict[int, List[MoveTree]] = {}  # move index -> list of sibling variations
         self._selected_variant: Dict[int, int] = {}  # move index -> index into that list, "currently active" sibling
         self._current_move: int = -1
@@ -126,7 +150,6 @@ class MoveTree(MoveTreeABC):
             node = parent
 
     def get_next_move(self) -> chess.Move:
-        print('GET NEXT MOVE CURRENT MOVE', self._current_move)
         move = None
         if self._current_move < len(self._main_line) - 1:
             move = self._main_line[self._current_move + 1]

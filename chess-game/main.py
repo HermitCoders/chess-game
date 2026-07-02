@@ -1,6 +1,9 @@
 import sys
+from dotenv import load_dotenv
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt6.QtGui import QCloseEvent
+
+load_dotenv()
 
 from game import GameFrame
 
