@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QApplication,
     QFileDialog,
+    QMessageBox,
+    QProgressBar,
 )
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 from board import ChessBoard
 from info import MovesRecord, EvaluationBar, EngineLines, ChessEngine
 from move_tree import MoveTree
+from captured_tray import CapturedPiecesTray, compute_captured, material_value
 
 GAMES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "games")
 
@@ -34,17 +37,33 @@ class GameFrame(QFrame):
 
         self.setStyleSheet("background-color: #262626")
 
-        self.evaluation_bar = EvaluationBar(self)
-        self.evaluation_bar.setFixedSize(30, 800)
-
         self.board = ChessBoard(self)
-        self.board.setFixedSize(800, 800)
+        self.board.setFixedSize(680, 680)
+
+        self.evaluation_bar = EvaluationBar(self)
+        self.evaluation_bar.setFixedSize(30, 780)
+
+        self.top_tray = CapturedPiecesTray()
+        self.bottom_tray = CapturedPiecesTray()
+
+        board_column_layout = QVBoxLayout()
+        board_column_layout.setContentsMargins(50, 10, 50, 10)
+        board_column_layout.setSpacing(8)
+        board_column_layout.addWidget(self.top_tray)
+        board_column_layout.addWidget(self.board)
+        board_column_layout.addWidget(self.bottom_tray)
+
+        board_column_widget = QWidget()
+        board_column_widget.setStyleSheet("background-color: #363636;")
+        board_column_widget.setLayout(board_column_layout)
+        board_column_widget.setFixedWidth(680 + 50 + 50)
+        board_column_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self.engine_lines = EngineLines(self)
         self.engine_lines.setFixedSize(300, 90)
 
         self.moves_record = MovesRecord(self)
-        self.moves_record.setFixedSize(300, 700)
+        self.moves_record.setFixedSize(300, 680)
         self.moves_record.on_move_clicked = self.jump_to_move
         
         self.move_tree: MoveTree = MoveTree(self.board.board)
@@ -61,11 +80,24 @@ class GameFrame(QFrame):
         self._eval_pending = False
         self.thread.finished.connect(self.thread.quit)
 
+        self.thinking_bar = QProgressBar()
+        self.thinking_bar.setRange(0, 0)  # indeterminate mode
+        self.thinking_bar.setFixedHeight(4)
+        self.thinking_bar.setMaximumHeight(4)
+        self.thinking_bar.setTextVisible(False)
+        self.thinking_bar.setStyleSheet(
+            "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
+            "QProgressBar::chunk {background-color: #5dcaa5;}"
+        )
+
         # Right side panel
         right_vbox_layout = QVBoxLayout()
         right_vbox_layout.setContentsMargins(0, 0, 0, 0)
-        right_vbox_layout.setSpacing(10)
+        right_vbox_layout.setSpacing(0)
         right_vbox_layout.addWidget(self.engine_lines)
+        right_vbox_layout.addSpacing(3)
+        right_vbox_layout.addWidget(self.thinking_bar)
+        right_vbox_layout.addSpacing(3)
         right_vbox_layout.addWidget(self.moves_record)
 
         right_vbox_widget = QWidget()
@@ -79,8 +111,9 @@ class GameFrame(QFrame):
         game_layout.setContentsMargins(0, 0, 0, 0)
         game_layout.setSpacing(10)
         game_layout.addWidget(self.evaluation_bar)
-        game_layout.addWidget(self.board)
+        game_layout.addWidget(board_column_widget)
         game_layout.addWidget(right_vbox_widget)
+        game_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         game_widget = QWidget()
         game_widget.setLayout(game_layout)
@@ -88,6 +121,7 @@ class GameFrame(QFrame):
         # Main Layout
         main_layout = QVBoxLayout()
         main_layout.addWidget(game_widget)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
@@ -99,6 +133,11 @@ class GameFrame(QFrame):
             self._eval_pending = True
             return
         self._engine_busy = True
+        self.engine_lines.set_thinking(True)
+        self.thinking_bar.setStyleSheet(
+            "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
+            "QProgressBar::chunk {background-color: #5dcaa5;}"
+        )
         self.request_evaluation.emit(self.board.board.copy())
 
     def handle_evaluation_result(self, board, result):
@@ -111,6 +150,11 @@ class GameFrame(QFrame):
                     self.engine_lines.table_widget.clearContents()
         finally:
             self._engine_busy = False
+            self.engine_lines.set_thinking(False)
+            self.thinking_bar.setStyleSheet(
+                "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
+                "QProgressBar::chunk {background-color: #262626;}"
+            )
             if self._eval_pending:
                 self._eval_pending = False
                 self.request_eval()
@@ -157,6 +201,23 @@ class GameFrame(QFrame):
 
         self.sync_board_to_tree()
         self._on_position_changed()
+    
+    def new_game(self):
+        reply = QMessageBox.question(
+            self,
+            "New Game",
+            "Start a new game? This will discard the current game and any analysis.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.board.board = chess.Board()
+        self.board.flipped = False
+        self.board._rebuild_board_ui()
+        self.move_tree = MoveTree(self.board.board)
+        self._on_position_changed()
 
     def sync_board_to_tree(self):
         """Rebuild the physical board to match wherever self.move_tree
@@ -174,7 +235,27 @@ class GameFrame(QFrame):
         panel and engine evaluation in sync with the new position."""
         self.moves_record.render_from_tree(self.move_tree)
         self.request_eval()
+        self._update_captured_trays()
+
+    def _update_captured_trays(self):
+        missing_white, missing_black = compute_captured(self.board.board)
+        material_lead = material_value(missing_black) - material_value(missing_white)
+        self.top_tray.update_captured(missing_white, chess.WHITE, max(-material_lead, 0))
+        self.bottom_tray.update_captured(missing_black, chess.BLACK, max(material_lead, 0))
     
+    def _check_game_end(self, board):
+        if board.is_checkmate():
+            winner = "White" if not board.turn else "Black"
+            QMessageBox.information(self, "Checkmate", f"Checkmate -- {winner} wins!")
+        elif board.is_stalemate():
+            QMessageBox.information(self, "Stalemate", "Stalemate -- the game is a draw.")
+        elif board.is_insufficient_material():
+            QMessageBox.information(self, "Draw", "Draw -- insufficient material to checkmate.")
+        elif board.can_claim_threefold_repetition():
+            QMessageBox.information(self, "Draw", "Draw by threefold repetition.")
+        elif board.is_seventyfive_moves():
+            QMessageBox.information(self, "Draw", "Draw -- 75 moves without a capture or pawn move.")
+
     def jump_to_move(self, node, move_index):
         node._current_move = move_index
         node.select_path_to_root()
@@ -194,7 +275,6 @@ class GameFrame(QFrame):
             square_index = self.board.mouse_position_to_square_index(local_pos)
 
             if event.buttons() == Qt.MouseButton.RightButton:
-                self.board.unframe_all()
                 self.board.set_square_style(square_index, "highlight")
 
             elif event.buttons() == Qt.MouseButton.LeftButton:
@@ -224,14 +304,14 @@ class GameFrame(QFrame):
                             self.move_tree = self.move_tree.move_down()
 
                     self._on_position_changed()
+                    self._check_game_end(self.board.board)
                 
-
             self.board.previous_sq_idx = square_index
         else:
             logger.debug("Mouse click is outside the frame's visible area")
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Control:
+        if event.key() == Qt.Key.Key_I:
             file_path, _ = QFileDialog.getOpenFileName(
                 self, "Open PGN", GAMES_DIR, "PGN files (*.pgn);;All files (*)"
             )
@@ -290,3 +370,11 @@ class GameFrame(QFrame):
                 
         elif event.key() == Qt.Key.Key_E:
             self.request_eval()
+        
+        elif event.key() == Qt.Key.Key_F:
+            self.board.flip_board()
+            self.engine_lines.refresh_colors()
+            self.evaluation_bar.update()
+        
+        elif event.key() == Qt.Key.Key_N:
+            self.new_game()
