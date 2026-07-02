@@ -1,6 +1,6 @@
 import os
 
-from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QApplication
+from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QApplication, QSizePolicy
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 import chess
@@ -37,6 +37,12 @@ class CapturedPiecesTray(QWidget):
         self.setFixedHeight(32)
         self.setStyleSheet("background-color: transparent;")
 
+        self.name_label = QLabel("")
+        self.name_label.setStyleSheet(
+            "color: #d0d0d0; font-family: Menlo; font-size: 13px; font-weight: bold;"
+        )
+        self.name_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+
         self.icon_layout = QHBoxLayout()
         self.icon_layout.setSpacing(0)
 
@@ -47,9 +53,15 @@ class CapturedPiecesTray(QWidget):
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 2, 0, 2)
+        outer.setSpacing(6)
+        outer.addWidget(self.name_label)
         outer.addLayout(self.icon_layout)
         outer.addWidget(self.material_label)
         outer.addStretch()
+
+    def set_name(self, name):
+        self.name_label.setText(name)
+        self.name_label.adjustSize()
 
     def update_captured(self, captured_types, piece_color, material_lead):
         while self.icon_layout.count():
