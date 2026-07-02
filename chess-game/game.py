@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QApplication,
+    QFileDialog,
 )
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal
@@ -229,7 +230,11 @@ class GameFrame(QFrame):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
-            self.import_pgn(os.path.join(GAMES_DIR, "lichess_pgn_2024.02.04_Quadrogroth_vs_Ka2sa.uTuihpsM.pgn"))
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Open PGN", GAMES_DIR, "PGN files (*.pgn);;All files (*)"
+            )
+            if file_path:
+                self.import_pgn(file_path)
 
         if event.key() == Qt.Key.Key_Left:
             if self.board.board.move_stack:
