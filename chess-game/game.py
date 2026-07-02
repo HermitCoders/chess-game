@@ -146,8 +146,15 @@ class GameFrame(QFrame):
                 self.evaluation_bar.update_engine_evaluation(result)
                 if not board.is_checkmate():
                     self.engine_lines.update_engine_lines(result, board)
+                    top_moves = []
+                    for eval_dict in result[:3]:
+                        line = eval_dict.get("pv", "")
+                        if line:
+                            top_moves.append(line[0])
+                    self.board.show_best_move_arrows(top_moves)
                 else:
                     self.engine_lines.table_widget.clearContents()
+                    self.board.clear_best_move_arrow()
         finally:
             self._engine_busy = False
             self.engine_lines.set_thinking(False)
@@ -233,6 +240,7 @@ class GameFrame(QFrame):
         """Call after self.move_tree changes (a move was made, or we
         navigated/jumped elsewhere in the tree) to keep the moves
         panel and engine evaluation in sync with the new position."""
+        self.board.clear_best_move_arrow()
         self.moves_record.render_from_tree(self.move_tree)
         self.request_eval()
         self._update_captured_trays()
