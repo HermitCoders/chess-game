@@ -217,7 +217,7 @@ class MoveTree(MoveTreeABC):
         def flush():
             nonlocal first_line
             if buffer:
-                line_prefix = prefix if first_line else '<span style="display:inline-block; width:22px;"></span>'
+                line_prefix = prefix if first_line else '<span style="display:inline-block; width:28px;"></span>'
                 lines.append((depth, line_prefix + " ".join(buffer)))
                 buffer.clear()
                 first_line = False
