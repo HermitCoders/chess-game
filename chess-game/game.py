@@ -67,6 +67,13 @@ class GameFrame(QFrame):
         self.moves_record.on_move_clicked = self.jump_to_move
         
         self.move_tree: MoveTree = MoveTree(self.board.board)
+        
+        self.white_name = "White"
+        self.black_name = "Black"
+
+        self._update_captured_trays()
+
+        self._last_top_moves = []
 
         # Create a thread for the engine
         self.chess_engine = ChessEngine()
@@ -151,6 +158,7 @@ class GameFrame(QFrame):
                         line = eval_dict.get("pv", "")
                         if line:
                             top_moves.append(line[0])
+                    self._last_top_moves = top_moves
                     self.board.show_best_move_arrows(top_moves)
                 else:
                     self.engine_lines.table_widget.clearContents()
@@ -199,6 +207,9 @@ class GameFrame(QFrame):
             print(f"Could not read a game from {pgn_path}")
             return
 
+        self.white_name = game.headers.get("White", "White")
+        self.black_name = game.headers.get("Black", "Black")
+
         self.board.board = game.board()
         self.move_tree = MoveTree(self.board.board)
         self._import_variations(game, self.move_tree)
@@ -220,6 +231,8 @@ class GameFrame(QFrame):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        self.white_name = "White"
+        self.black_name = "Black"
         self.board.board = chess.Board()
         self.board.flipped = False
         self.board._rebuild_board_ui()
@@ -240,6 +253,7 @@ class GameFrame(QFrame):
         """Call after self.move_tree changes (a move was made, or we
         navigated/jumped elsewhere in the tree) to keep the moves
         panel and engine evaluation in sync with the new position."""
+        self._last_top_moves = []
         self.board.clear_best_move_arrow()
         self.moves_record.render_from_tree(self.move_tree)
         self.request_eval()
@@ -248,8 +262,22 @@ class GameFrame(QFrame):
     def _update_captured_trays(self):
         missing_white, missing_black = compute_captured(self.board.board)
         material_lead = material_value(missing_black) - material_value(missing_white)
-        self.top_tray.update_captured(missing_white, chess.WHITE, max(-material_lead, 0))
-        self.bottom_tray.update_captured(missing_black, chess.BLACK, max(material_lead, 0))
+
+        white_tray_data = (self.white_name, missing_white, chess.WHITE, max(-material_lead, 0))
+        black_tray_data = (self.black_name, missing_black, chess.BLACK, max(material_lead, 0))
+
+        # White sits at the bottom normally, top when flipped -- keep
+        # each tray showing whichever color is actually on that side
+        # of the board right now.
+        top_data, bottom_data = (
+            (black_tray_data, white_tray_data)
+            if self.board.flipped
+            else (white_tray_data, black_tray_data)
+        )
+
+        for tray, (name, missing, color, lead) in ((self.top_tray, top_data), (self.bottom_tray, bottom_data)):
+            tray.set_name(name)
+            tray.update_captured(missing, color, lead)
     
     def _check_game_end(self, board):
         if board.is_checkmate():
@@ -383,6 +411,8 @@ class GameFrame(QFrame):
             self.board.flip_board()
             self.engine_lines.refresh_colors()
             self.evaluation_bar.update()
+            self._update_captured_trays()
+            self.board.show_best_move_arrows(self._last_top_moves)
         
         elif event.key() == Qt.Key.Key_N:
             self.new_game()

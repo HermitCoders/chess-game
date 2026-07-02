@@ -83,6 +83,11 @@ class MovesRecord(QWidget):
         self.text_edit.setFrameStyle(0)
         self.text_edit.setStyleSheet(
             "QTextBrowser {background-color: #363636; color: #f6f6f6; border: 0px;}"
+            "QScrollBar:vertical {background: #363636; width: 8px; margin: 0px;}"
+            "QScrollBar::handle:vertical {background: #5a5a5a; border-radius: 4px; min-height: 20px;}"
+            "QScrollBar::handle:vertical:hover {background: #6e6e6e;}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {height: 0px;}"
+            "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background: none;}"
         )
         self.text_edit.setFont(QFont("Menlo", 14))
         self.text_edit.anchorClicked.connect(self._on_anchor_clicked)
@@ -97,7 +102,8 @@ class MovesRecord(QWidget):
         self._targets = {}
         rows = move_tree.get_root().render_table(self._targets)
 
-        viewport_width = self.text_edit.viewport().width()
+        scrollbar_width = self.text_edit.verticalScrollBar().sizeHint().width()
+        viewport_width = self.text_edit.viewport().width() - scrollbar_width
         move_number_width = 40
         remaining = max(viewport_width - move_number_width, 100)
         column_width = remaining // 2
@@ -147,6 +153,7 @@ class MovesRecord(QWidget):
         previous_scroll = scrollbar.value()
 
         self.text_edit.setHtml("".join(html_parts))
+        self.text_edit.document().setTextWidth(self.text_edit.viewport().width())
 
         scrollbar.setValue(previous_scroll)
         self._scroll_to_active()
@@ -166,15 +173,19 @@ class MovesRecord(QWidget):
                 if fmt.isAnchor() and self._active_anchor in fmt.anchorNames():
                     cursor = QTextCursor(doc)
                     cursor.setPosition(frag.position())
-                    rect = self.text_edit.cursorRect(cursor)
+                    # Trust Qt's own visibility check rather than
+                    # reimplementing it -- ensureCursorVisible() is a
+                    # no-op if the cursor is already visible, so this
+                    # is safe to call unconditionally.
+                    self.text_edit.setTextCursor(cursor)
+                    self.text_edit.ensureCursorVisible()
 
+                    # ensureCursorVisible() only scrolls the minimum
+                    # needed, landing the active line right at the
+                    # viewport's edge -- nudge a bit further so it
+                    # settles in with some breathing room instead.
                     scrollbar = self.text_edit.verticalScrollBar()
-                    visible_top = scrollbar.value()
-                    visible_bottom = visible_top + self.text_edit.viewport().height()
-
-                    if rect.top() < visible_top or rect.bottom() > visible_bottom:
-                        self.text_edit.setTextCursor(cursor)
-                        self.text_edit.ensureCursorVisible()
+                    scrollbar.setValue(min(scrollbar.value() + 24, scrollbar.maximum()))
                     return
                 it += 1
             block = block.next()
@@ -214,27 +225,31 @@ class EvaluationBar(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         if self.centipawns is not None:
-            bar_height = sigmoid(self.centipawns / 100)
+            white_fraction = sigmoid(self.centipawns / 100)
         else:
-            bar_height = 0 if str(self.mate)[1:2] == "-" else 1
+            # mate encodes mate-in-N for whichever side delivers it;
+            # this fraction still always means "how much of the bar
+            # belongs to White", independent of board orientation.
+            white_fraction = 0.0 if str(self.mate)[1:2] == "-" else 1.0
 
-        if self.board_frame.flipped:
-            bar_height = 1 - bar_height
+        flipped = self.board_frame.flipped
+        bottom_color = Qt.GlobalColor.black if flipped else Qt.GlobalColor.white
+        top_color = Qt.GlobalColor.white if flipped else Qt.GlobalColor.black
+        bottom_fraction = (1 - white_fraction) if flipped else white_fraction
 
         rect = self.rect()
-        white_height = int(rect.height() * (bar_height))
-        black_height = rect.height() - white_height
-        black_rect = rect.adjusted(0, 0, 0, -white_height)
-        white_rect = rect.adjusted(0, black_height, 0, 0)
+        bottom_height = int(rect.height() * bottom_fraction)
+        top_height = rect.height() - bottom_height
+        top_rect = rect.adjusted(0, 0, 0, -bottom_height)
+        bottom_rect = rect.adjusted(0, top_height, 0, 0)
 
-        # Draw the black and white sections
-        painter.fillRect(white_rect, Qt.GlobalColor.white)
-        painter.fillRect(black_rect, Qt.GlobalColor.black)
+        painter.fillRect(bottom_rect, bottom_color)
+        painter.fillRect(top_rect, top_color)
 
         painter.setFont(QFont("Menlo", 12))
 
-        if bar_height >= 0.5:
-            painter.setPen(QColor("black"))
+        if bottom_fraction >= 0.5:
+            text_color = "black" if bottom_color == Qt.GlobalColor.white else "white"
             text_pos = (
                 0,
                 rect.height() - int(1.5 * painter.fontMetrics().height()),
@@ -242,14 +257,15 @@ class EvaluationBar(QWidget):
                 painter.fontMetrics().height(),
             )
         else:
-            painter.setPen(QColor("white"))
+            text_color = "black" if top_color == Qt.GlobalColor.white else "white"
             text_pos = (
                 0,
                 int(0.5 * painter.fontMetrics().height()),
                 rect.width(),
                 painter.fontMetrics().height(),
             )
-        # Draw the evaluation text
+        painter.setPen(QColor(text_color))
+
         if self.centipawns is not None:
             text = f"{abs(self.centipawns / 100):.1f}"
         else:
