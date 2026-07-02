@@ -36,4 +36,5 @@ if __name__ == "__main__":
     window.show()
     # Start the engine thread when the application starts
     window.game_frame.thread.start()
+    window.game_frame.request_eval()
     app.exec()

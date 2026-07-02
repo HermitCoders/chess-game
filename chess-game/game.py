@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtCore import Qt, QRect, QThread
+from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal
 import chess
 import chess.engine
 import chess.pgn
@@ -21,6 +21,8 @@ GAMES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "game
 
 
 class GameFrame(QFrame):
+    request_evaluation = pyqtSignal(object)
+
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -50,11 +52,11 @@ class GameFrame(QFrame):
         self.thread: QThread = QThread(self)
         self.chess_engine.moveToThread(self.thread)
 
-        # Connect signals and slots
-        self.thread.started.connect(
-            lambda: self.chess_engine.evaluate(self.board.board)
-        )
+        self.request_evaluation.connect(self.chess_engine.evaluate)
+
         self.chess_engine.evaluation_result.connect(self.handle_evaluation_result)
+        self._engine_busy = False
+        self._eval_pending = False
         self.thread.finished.connect(self.thread.quit)
 
         # Right side panel
@@ -89,13 +91,27 @@ class GameFrame(QFrame):
         main_widget.setLayout(main_layout)
         self.setLayout(main_layout)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    
+    def request_eval(self):
+        if self._engine_busy:
+            self._eval_pending = True
+            return
+        self._engine_busy = True
+        self.request_evaluation.emit(self.board.board.copy())
 
-    def handle_evaluation_result(self, result):
-        self.evaluation_bar.update_engine_evaluation(result)
-        if not self.board.board.is_checkmate():
-            self.engine_lines.update_engine_lines(result)
-        else:
-            self.engine_lines.table_widget.clearContents()
+    def handle_evaluation_result(self, board, result):
+        try:
+            if board.fen() == self.board.board.fen():
+                self.evaluation_bar.update_engine_evaluation(result)
+                if not board.is_checkmate():
+                    self.engine_lines.update_engine_lines(result, board)
+                else:
+                    self.engine_lines.table_widget.clearContents()
+        finally:
+            self._engine_busy = False
+            if self._eval_pending:
+                self._eval_pending = False
+                self.request_eval()
 
     def import_pgn(self, pgn_path):
         with open(pgn_path) as pgn:
@@ -112,6 +128,7 @@ class GameFrame(QFrame):
                 self.moves_record.render_from_tree(self.move_tree)
 
                 QApplication.processEvents()
+            self.request_eval()
 
     def sync_board_to_tree(self):
         """Rebuild the physical board to match wherever self.move_tree
@@ -129,6 +146,7 @@ class GameFrame(QFrame):
         self.move_tree = node
         self.sync_board_to_tree()
         self.moves_record.render_from_tree(self.move_tree)
+        self.request_eval()
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -172,6 +190,7 @@ class GameFrame(QFrame):
                             self.move_tree = self.move_tree.move_down()
 
                     self.moves_record.render_from_tree(self.move_tree)
+                    self.request_eval()
                 
 
             self.board.previous_sq_idx = square_index
@@ -196,6 +215,7 @@ class GameFrame(QFrame):
                             self.move_tree = parent
 
                     self.moves_record.render_from_tree(self.move_tree)
+                    self.request_eval()
                 else:
                     print('KONIEC WARIANTU')
                     mama = self.move_tree.move_up()
@@ -203,6 +223,7 @@ class GameFrame(QFrame):
                         self.move_tree = mama
                         self.sync_board_to_tree()
                         self.moves_record.render_from_tree(self.move_tree)
+                        self.request_eval()
             else:
                 print('PUSTY MOVESTACK')
             print(self.move_tree._current_move)
@@ -217,6 +238,7 @@ class GameFrame(QFrame):
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
                 self.moves_record.render_from_tree(self.move_tree)
+                self.request_eval()
         
         elif event.key() == Qt.Key.Key_Down:
             print("D")
@@ -226,6 +248,7 @@ class GameFrame(QFrame):
                 self.move_tree = child
                 self.sync_board_to_tree()
                 self.moves_record.render_from_tree(self.move_tree)
+                self.request_eval()
         
         elif event.key() == Qt.Key.Key_Up:
             print("U")
@@ -234,6 +257,7 @@ class GameFrame(QFrame):
                 self.move_tree = mama 
                 self.sync_board_to_tree()
                 self.moves_record.render_from_tree(self.move_tree)
+                self.request_eval()
                 
         elif event.key() == Qt.Key.Key_E:
-            self.thread.started.emit()
+            self.request_eval()

@@ -227,7 +227,7 @@ class EngineLines(QWidget):
         item.setFont(QFont("Menlo", 12))
         self.table_widget.setItem(row, col, item)
 
-    def update_engine_lines(self, evaluation):
+    def update_engine_lines(self, evaluation, board):
         self.table_widget.setColumnCount(2)
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()
@@ -242,7 +242,7 @@ class EngineLines(QWidget):
             line = eval_dict.get("pv", "")
             # Consider only lines longer than two moves unless its forced mate
             if len(line) > 2 or score.mate():
-                line_str = self.board_frame.board.variation_san(line)
+                line_str = board.variation_san(line)
                 self.add_table_item(
                     line_str,
                     idx,
@@ -251,10 +251,9 @@ class EngineLines(QWidget):
                 )
         self.update()
 
-
 class ChessEngine(QObject):
-    evaluation_result = pyqtSignal(list)
-    
+    evaluation_result = pyqtSignal(object, list)
+
     engine = chess.engine.SimpleEngine.popen_uci(
         "/opt/homebrew/bin/stockfish"
     )
@@ -263,4 +262,4 @@ class ChessEngine(QObject):
         info = self.engine.analyse(
             board, chess.engine.Limit(depth=16), multipv=5
         )
-        self.evaluation_result.emit(info)
+        self.evaluation_result.emit(board, info)
