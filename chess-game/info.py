@@ -6,8 +6,10 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
     QTextBrowser,
+    QGraphicsOpacityEffect,
+    QProgressBar,
 )
-from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor
+from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor, QFontMetrics
 from PyQt6.QtCore import Qt, QRect, QObject, QEvent, QTimer, pyqtSignal
 import chess
 import chess.engine
@@ -193,6 +195,7 @@ class MovesRecord(QWidget):
 class EvaluationBar(QWidget):
     def __init__(self, parent):
         super().__init__()
+        self.board_frame = parent.board
         self.centipawns = 0
         self.mate = None
 
@@ -214,6 +217,9 @@ class EvaluationBar(QWidget):
             bar_height = sigmoid(self.centipawns / 100)
         else:
             bar_height = 0 if str(self.mate)[1:2] == "-" else 1
+
+        if self.board_frame.flipped:
+            bar_height = 1 - bar_height
 
         rect = self.rect()
         white_height = int(rect.height() * (bar_height))
@@ -259,8 +265,10 @@ class EvaluationBar(QWidget):
 
 class EngineLines(QWidget):
     def __init__(self, parent):
-        super().__init__()
+        super().__init__(parent)
         self.board_frame = parent.board
+        self._last_evaluation = None
+        self._last_board = None
 
         self.setStyleSheet("background-color: #363636")
 
@@ -302,6 +310,14 @@ class EngineLines(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
+    def set_thinking(self, is_thinking):
+        if is_thinking:
+            effect = QGraphicsOpacityEffect()
+            effect.setOpacity(0.4)
+            self.table_widget.setGraphicsEffect(effect)
+        else:
+            self.table_widget.setGraphicsEffect(None)
+
     def get_score_str(self, score):
         if score.score() is not None:
             score_str = str(round(score.score() / 100, 1))
@@ -314,38 +330,80 @@ class EngineLines(QWidget):
             )
         return score_str
 
-    def add_table_item(self, text, row, col, alignment):
+    def add_table_item(self, text, row, col, alignment, color=None, bold=False):
         item = QTableWidgetItem(text)
         item.setTextAlignment(alignment)
-        item.setForeground(QColor("#f6f6f6"))
-        item.setFont(QFont("Menlo", 12))
+        item.setForeground(QColor(color or "#f6f6f6"))
+        font = QFont("Menlo", 12)
+        font.setBold(bold)
+        item.setFont(font)
+        if row % 2 == 1:
+            item.setBackground(QColor("#3d3d3d"))
         self.table_widget.setItem(row, col, item)
 
+    def _color_for_score(self, score):
+        flipped = self.board_frame.flipped
+        mate = score.mate()
+        if mate is not None:
+            favors_bottom = (mate > 0) != flipped
+            return "#5dcaa5" if favors_bottom else "#e2514c"
+        centipawns = score.score()
+        if centipawns is None:
+            return "#f6f6f6"
+        magnitude = min(abs(centipawns) / 300, 1.0)
+        favors_bottom = (centipawns >= 0) != flipped
+        target = "#5dcaa5" if favors_bottom else "#e2514c"
+        return self._blend("#f6f6f6", target, magnitude)
+
+    def _blend(self, base_hex, target_hex, t):
+        base = QColor(base_hex)
+        target = QColor(target_hex)
+        r = int(base.red() + (target.red() - base.red()) * t)
+        g = int(base.green() + (target.green() - base.green()) * t)
+        b = int(base.blue() + (target.blue() - base.blue()) * t)
+        return QColor(r, g, b).name()
+
     def update_engine_lines(self, evaluation, board):
+        self._last_evaluation = evaluation
+        self._last_board = board
         self.table_widget.setColumnCount(2)
         self.table_widget.clearContents()
         for idx, eval_dict in enumerate(evaluation[:3]):
             score = eval_dict["score"].white()
             score_str = self.get_score_str(score)
+            score_color = self._color_for_score(score)
             self.add_table_item(
                 score_str,
                 idx,
                 0,
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                color=score_color,
             )
 
             line = eval_dict.get("pv", "")
             # Consider only lines longer than two moves unless its forced mate
             if len(line) > 2 or score.mate():
                 line_str = board.variation_san(line)
+                available_width = self.table_widget.columnWidth(1) - 10
+                metrics = QFontMetrics(QFont("Menlo", 12))
+                elided = metrics.elidedText(
+                    line_str, Qt.TextElideMode.ElideRight, available_width
+                )
                 self.add_table_item(
-                    line_str,
+                    elided,
                     idx,
                     1,
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 )
         self.update()
 
+    def refresh_colors(self):
+        """Re-render the last known evaluation with the current board
+        orientation's color mapping, without re-querying the engine --
+        flipping the board doesn't change the position, so there's
+        nothing new to evaluate."""
+        if self._last_evaluation is not None:
+            self.update_engine_lines(self._last_evaluation, self._last_board)
 
 class ChessEngine(QObject):
     evaluation_result = pyqtSignal(object, list)
@@ -359,7 +417,7 @@ class ChessEngine(QObject):
     def evaluate(self, board):
         try:
             info = self.engine.analyse(
-                board, chess.engine.Limit(depth=16), multipv=5
+                board, chess.engine.Limit(depth=16), multipv=3
             )
         except chess.engine.EngineTerminatedError:
             logger.error("Stockfish process terminated unexpectedly during analysis")
