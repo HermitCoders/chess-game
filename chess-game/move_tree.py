@@ -70,7 +70,7 @@ class MoveTreeABC(ABC):
         pass
 
     @abstractmethod
-    def render_outline(self, targets: dict, depth: int = 0) -> list:
+    def render_outline(self, targets: dict, depth: int = 0, prefix: str = "") -> list:
         pass
 
     @abstractmethod
@@ -193,12 +193,17 @@ class MoveTree(MoveTreeABC):
             board.push(move)
         return board
 
-    def render_outline(self, targets: dict, depth: int = 0) -> list:
+    def render_outline(self, targets: dict, depth: int = 0, prefix: str = "") -> list:
         """Render this node and its variations as a list of (depth, html)
         lines, in the lichess/chess.com style: variations get their own
         indented line(s), the parent line continues below. Multiple
         sibling variations at the same branch point are rendered one
         after another at the same depth, not nested inside each other.
+
+        `prefix` is the connector-line prefix (box-drawing characters)
+        for this node's own first line, carried down from the parent
+        so nested variations show a continuation bar ("|  ") before
+        their own branch mark.
 
         `targets` is a dict mutated in place: anchor id (str) -> (node,
         move_index), so the UI layer can map a click back to an exact
@@ -207,16 +212,24 @@ class MoveTree(MoveTreeABC):
         lines = []
         board = self._board.copy(stack=True)
         buffer = []
+        first_line = True
 
         def flush():
+            nonlocal first_line
             if buffer:
-                lines.append((depth, " ".join(buffer)))
+                line_prefix = prefix if first_line else '<span style="display:inline-block; width:22px;"></span>'
+                lines.append((depth, line_prefix + " ".join(buffer)))
                 buffer.clear()
+                first_line = False
 
         def make_anchor(node, move_index, san):
             anchor_id = str(len(targets))
             targets[anchor_id] = (node, move_index)
             return f'<a name="{anchor_id}" href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
+
+        def child_prefix(is_last):
+            connector = "\u2514\u2500" if is_last else "\u251c\u2500"
+            return f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
 
         for i, move in enumerate(self._main_line):
             turn_is_white = board.turn == chess.WHITE
@@ -234,13 +247,22 @@ class MoveTree(MoveTreeABC):
             siblings = self._alt_line.get(i, [])
             if siblings:
                 flush()
-                for sibling in siblings:
-                    lines.extend(sibling.render_outline(targets, depth + 1))
+                for j, sibling in enumerate(siblings):
+                    is_last = j == len(siblings) - 1
+                    lines.extend(
+                        sibling.render_outline(
+                            targets, depth + 1, child_prefix(is_last)
+                        )
+                    )
 
         flush()
 
-        for sibling in self._alt_line.get(-1, []):
-            lines.extend(sibling.render_outline(targets, depth + 1))
+        root_siblings = self._alt_line.get(-1, [])
+        for j, sibling in enumerate(root_siblings):
+            is_last = j == len(root_siblings) - 1
+            lines.extend(
+                sibling.render_outline(targets, depth + 1, child_prefix(is_last))
+            )
 
         return lines
 
@@ -293,16 +315,29 @@ class MoveTree(MoveTreeABC):
             siblings = self._alt_line.get(i, [])
             if siblings:
                 flush_row()
-                for sibling in siblings:
+                for j, sibling in enumerate(siblings):
+                    is_last = j == len(siblings) - 1
+                    connector = "\u2514\u2500" if is_last else "\u251c\u2500"
+                    prefix = f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
                     rows.append(
-                        {"type": "variation", "lines": sibling.render_outline(targets, depth=0)}
+                        {
+                            "type": "variation",
+                            "lines": sibling.render_outline(targets, depth=0, prefix=prefix),
+                        }
                     )
 
         flush_row()
 
-        for sibling in self._alt_line.get(-1, []):
+        root_siblings = self._alt_line.get(-1, [])
+        for j, sibling in enumerate(root_siblings):
+            is_last = j == len(root_siblings) - 1
+            connector = "\u2514\u2500" if is_last else "\u251c\u2500"
+            prefix = f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
             rows.append(
-                {"type": "variation", "lines": sibling.render_outline(targets, depth=0)}
+                {
+                    "type": "variation",
+                    "lines": sibling.render_outline(targets, depth=0, prefix=prefix),
+                }
             )
 
         return rows

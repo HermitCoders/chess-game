@@ -73,6 +73,8 @@ class MovesRecord(QWidget):
         self.setStyleSheet("background-color: #363636")
 
         self.text_edit = MovesBrowser()
+        self.text_edit.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.text_edit.document().setDocumentMargin(0)
         self.text_edit.setOpenLinks(False)
         self.text_edit.setReadOnly(True)
         self.text_edit.setFrameStyle(0)
@@ -92,6 +94,11 @@ class MovesRecord(QWidget):
         self._targets = {}
         rows = move_tree.get_root().render_table(self._targets)
 
+        viewport_width = self.text_edit.viewport().width()
+        move_number_width = 40
+        remaining = max(viewport_width - move_number_width, 100)
+        column_width = remaining // 2
+        
         self._active_anchor = None
         if move_tree._current_move >= 0:
             for anchor_id, (node, idx) in self._targets.items():
@@ -108,26 +115,37 @@ class MovesRecord(QWidget):
                 html,
             )
 
-        html_parts = ['<table width="100%" style="border-collapse: collapse;">']
+        html_parts = ['<table width="100%" cellpadding="6" cellspacing="0" border="0" style="border-collapse: collapse; margin: 0;">']
         for row in rows:
             if row["type"] == "row":
                 html_parts.append(
                     '<tr>'
-                    f'<td width="40" style="color:#8a8a8a; padding: 2px 4px; white-space: nowrap;">{row["move_number"]}.</td>'
-                    f'<td width="120" style="padding: 2px 4px;">{style(row["white"])}</td>'
-                    f'<td width="120" style="padding: 2px 4px;">{style(row["black"])}</td>'
+                    f'<td width="{move_number_width}" style="color:#8a8a8a; white-space: nowrap;">{row["move_number"]}.</td>'
+                    f'<td width="{column_width}">{style(row["white"])}</td>'
+                    f'<td width="{column_width}">{style(row["black"])}</td>'
                     '</tr>'
                 )
             else:  # variation
-                variation_html = " ".join(style(html) for depth, html in row["lines"])
+                variation_lines = []
+                for depth, html in row["lines"]:
+                    margin_left = depth * 16
+                    variation_lines.append(
+                        f'<div style="margin-left: {margin_left}px; margin-top: 4px;">{style(html)}</div>'
+                    )
+                variation_html = "".join(variation_lines)
                 html_parts.append(
-                    '<tr>'
-                    f'<td></td><td colspan="2" style="color:#9a9a9a; padding: 2px 4px 2px 20px;">{variation_html}</td>'
+                    '<tr style="background-color: #2b2b2b;">'
+                    f'<td colspan="3" style="color:#9a9a9a;">{variation_html}</td>'
                     '</tr>'
                 )
         html_parts.append("</table>")
 
+        scrollbar = self.text_edit.verticalScrollBar()
+        previous_scroll = scrollbar.value()
+
         self.text_edit.setHtml("".join(html_parts))
+
+        scrollbar.setValue(previous_scroll)
         self._scroll_to_active()
 
     def _scroll_to_active(self):
@@ -137,18 +155,23 @@ class MovesRecord(QWidget):
 
         doc = self.text_edit.document()
         block = doc.begin()
-        found = False
         while block.isValid():
             it = block.begin()
             while not it.atEnd():
                 frag = it.fragment()
                 fmt = frag.charFormat()
                 if fmt.isAnchor() and self._active_anchor in fmt.anchorNames():
-                    found = True
                     cursor = QTextCursor(doc)
                     cursor.setPosition(frag.position())
-                    self.text_edit.setTextCursor(cursor)
-                    self.text_edit.ensureCursorVisible()
+                    rect = self.text_edit.cursorRect(cursor)
+
+                    scrollbar = self.text_edit.verticalScrollBar()
+                    visible_top = scrollbar.value()
+                    visible_bottom = visible_top + self.text_edit.viewport().height()
+
+                    if rect.top() < visible_top or rect.bottom() > visible_bottom:
+                        self.text_edit.setTextCursor(cursor)
+                        self.text_edit.ensureCursorVisible()
                     return
                 it += 1
             block = block.next()
