@@ -46,10 +46,6 @@ class MoveTreeABC(ABC):
         pass
 
     @abstractmethod
-    def get_string_repr(self) -> str:
-        pass
-
-    @abstractmethod
     def get_variant(self) -> MoveTreeABC:
         pass
 
@@ -58,7 +54,8 @@ class MoveTree(MoveTreeABC):
     def __init__(self, board: chess.Board, parent=None, id: int = 0) -> None:
         self._parent: MoveTree = parent
         self._main_line: List[chess.Move] = []  # lewo prawo szczala
-        self._alt_line: Dict[int, MoveTree] = {}  # gura dul szczala
+        self._alt_line: Dict[int, List[MoveTree]] = {}  # move index -> list of sibling variations
+        self._selected_variant: Dict[int, int] = {}  # move index -> index into that list, "currently active" sibling
         self._current_move: int = -1
         self._board: chess.Board = board.copy()
         self.id = id
@@ -78,7 +75,7 @@ class MoveTree(MoveTreeABC):
         return move
 
     def move_down(self) -> MoveTreeABC:
-        return self._alt_line.get(self._current_move)
+        return self.get_variant()
 
     def move_up(self) -> MoveTreeABC:
         return self._parent
@@ -88,25 +85,45 @@ class MoveTree(MoveTreeABC):
         self._current_move = len(self._main_line) - 1
 
     def add_variant(self, move: chess.Move, board: chess.Board) -> None:
+        siblings = self._alt_line.setdefault(self._current_move, [])
+
+        for i, sibling in enumerate(siblings):
+            if sibling.get_current_move() == move:
+                # This exact variation already exists -- just select it
+                # rather than creating a duplicate.
+                self._selected_variant[self._current_move] = i
+                return
+
         variant_board = board.copy()
-        # print("MY PARENT ", self._parent)
-        # if self._parent:
-        #     print("MY PARENT ID ", self._parent.id)
-        
-        # print("MY ID ", self.id)
-        # print('CURRENT VARINT IN THIS MOVE IF EXISTS: ', self._alt_line.get(self._current_move))
-        # for key, item in self._alt_line.items():
-        #     print('MOVE ', key,  ' VARIANT ', item)
-        if self._alt_line.get(self._current_move) is None:
-            mt= MoveTree(
-                parent=self, board=variant_board, id=self.id+1
-            )
-            # print('NEW WARIANT: ', mt, ' in MOVE ', self._current_move)
-            self._alt_line[self._current_move] = mt
-            self._alt_line[self._current_move].add_main(move)
+        mt = MoveTree(parent=self, board=variant_board, id=self.id + 1)
+        mt.add_main(move)
+        siblings.append(mt)
+        self._selected_variant[self._current_move] = len(siblings) - 1
+
+    def get_variants(self) -> List["MoveTree"]:
+        return self._alt_line.get(self._current_move, [])
 
     def has_variant(self) -> bool:
-        return self._alt_line.get(self._current_move) is not None
+        return bool(self.get_variants())
+
+    def select_variant(self, sibling_index: int) -> None:
+        """Mark which sibling variation is 'active' at the current move,
+        so keyboard navigation (move_down) follows it."""
+        self._selected_variant[self._current_move] = sibling_index
+    
+    def select_path_to_root(self) -> None:
+        """Walk up from this node to the root, marking at each parent
+        which child (self, or the ancestor leading to self) is the
+        'selected' sibling at that branch point -- so keyboard
+        navigation stays consistent with wherever you just jumped to."""
+        node = self
+        while node._parent is not None:
+            parent = node._parent
+            for move_index, siblings in parent._alt_line.items():
+                if node in siblings:
+                    parent._selected_variant[move_index] = siblings.index(node)
+                    break
+            node = parent
 
     def get_next_move(self) -> chess.Move:
         print('GET NEXT MOVE CURRENT MOVE', self._current_move)
@@ -123,28 +140,6 @@ class MoveTree(MoveTreeABC):
         if self._current_move >= 0:
             move = self._main_line[self._current_move - 1]
         return move
-
-    def get_string_repr(self) -> str:
-        board = self._board.copy(stack=True)
-        san = []
-
-
-        for i, move in enumerate(self._main_line):
-            if board.turn == chess.WHITE:
-                san.append(f"{board.fullmove_number}. {board.san_and_push(move)}")
-            elif not san:
-                san.append(f"{board.fullmove_number}...{board.san_and_push(move)}")
-            else:
-                san.append(board.san_and_push(move))
-            varanit = self._alt_line.get(i)
-            if varanit:
-                san.append(f"({varanit.get_string_repr()})")
-
-        varanit = self._alt_line.get(-1)
-        if varanit:
-            san.insert(1, f"({varanit.get_string_repr()})") 
-        
-        return " ".join(san)
     
     def get_root(self) -> "MoveTree":
         node = self
@@ -153,7 +148,11 @@ class MoveTree(MoveTreeABC):
         return node
 
     def get_variant(self) -> MoveTreeABC:
-        return self._alt_line.get(self._current_move)
+        siblings = self.get_variants()
+        if not siblings:
+            return None
+        idx = min(self._selected_variant.get(self._current_move, 0), len(siblings) - 1)
+        return siblings[idx]
     
     def get_board(self) -> chess.Board:
         """Reconstruct the actual board position for this node.
@@ -167,10 +166,16 @@ class MoveTree(MoveTreeABC):
             board.push(move)
         return board
 
-    def render_outline(self, depth: int = 0) -> list:
-        """Render this node and its variations as a list of (depth, text)
+    def render_outline(self, targets: dict, depth: int = 0) -> list:
+        """Render this node and its variations as a list of (depth, html)
         lines, in the lichess/chess.com style: variations get their own
-        indented line(s), the parent line continues below.
+        indented line(s), the parent line continues below. Multiple
+        sibling variations at the same branch point are rendered one
+        after another at the same depth, not nested inside each other.
+
+        `targets` is a dict mutated in place: anchor id (str) -> (node,
+        move_index), so the UI layer can map a click back to an exact
+        position to jump to.
         """
         lines = []
         board = self._board.copy(stack=True)
@@ -181,23 +186,33 @@ class MoveTree(MoveTreeABC):
                 lines.append((depth, " ".join(buffer)))
                 buffer.clear()
 
-        for i, move in enumerate(self._main_line):
-            if board.turn == chess.WHITE:
-                buffer.append(f"{board.fullmove_number}. {board.san_and_push(move)}")
-            elif not buffer:
-                buffer.append(f"{board.fullmove_number}...{board.san_and_push(move)}")
-            else:
-                buffer.append(board.san_and_push(move))
+        def make_anchor(node, move_index, san):
+            anchor_id = str(len(targets))
+            targets[anchor_id] = (node, move_index)
+            return f'<a href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
 
-            variant = self._alt_line.get(i)
-            if variant:
+        for i, move in enumerate(self._main_line):
+            turn_is_white = board.turn == chess.WHITE
+            fullmove_number = board.fullmove_number
+            san = board.san_and_push(move)
+            move_html = make_anchor(self, i, san)
+
+            if turn_is_white:
+                buffer.append(f"{fullmove_number}. {move_html}")
+            elif not buffer:
+                buffer.append(f"{fullmove_number}...{move_html}")
+            else:
+                buffer.append(move_html)
+
+            siblings = self._alt_line.get(i, [])
+            if siblings:
                 flush()
-                lines.extend(variant.render_outline(depth + 1))
+                for sibling in siblings:
+                    lines.extend(sibling.render_outline(targets, depth + 1))
 
         flush()
 
-        variant_before_first_move = self._alt_line.get(-1)
-        if variant_before_first_move:
-            lines.extend(variant_before_first_move.render_outline(depth + 1))
+        for sibling in self._alt_line.get(-1, []):
+            lines.extend(sibling.render_outline(targets, depth + 1))
 
         return lines
