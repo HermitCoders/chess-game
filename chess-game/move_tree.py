@@ -4,6 +4,14 @@ from typing import Dict, List
 from abc import ABC, abstractmethod
 
 
+def _connector_span(is_last: bool) -> str:
+    """Box-drawing connector for a variation branch: an 'L' shape if
+    this is the last sibling at its branch point, a 'T' shape
+    otherwise. Wrapped in a fixed-width span so it lines up exactly
+    with continuation-line padding regardless of glyph metrics."""
+    connector = "\u2514\u2500" if is_last else "\u251c\u2500"
+    return f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
+
 class MoveTreeABC(ABC):
     @abstractmethod
     def move_forward(self) -> chess.Move:
@@ -228,8 +236,7 @@ class MoveTree(MoveTreeABC):
             return f'<a name="{anchor_id}" href="{anchor_id}" style="color:#f6f6f6; text-decoration:none;">{san}</a>'
 
         def child_prefix(is_last):
-            connector = "\u2514\u2500" if is_last else "\u251c\u2500"
-            return f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
+            return _connector_span(is_last)
 
         for i, move in enumerate(self._main_line):
             turn_is_white = board.turn == chess.WHITE
@@ -317,12 +324,12 @@ class MoveTree(MoveTreeABC):
                 flush_row()
                 for j, sibling in enumerate(siblings):
                     is_last = j == len(siblings) - 1
-                    connector = "\u2514\u2500" if is_last else "\u251c\u2500"
-                    prefix = f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
                     rows.append(
                         {
                             "type": "variation",
-                            "lines": sibling.render_outline(targets, depth=0, prefix=prefix),
+                            "lines": sibling.render_outline(
+                                targets, depth=0, prefix=_connector_span(is_last)
+                            ),
                         }
                     )
 
@@ -331,12 +338,12 @@ class MoveTree(MoveTreeABC):
         root_siblings = self._alt_line.get(-1, [])
         for j, sibling in enumerate(root_siblings):
             is_last = j == len(root_siblings) - 1
-            connector = "\u2514\u2500" if is_last else "\u251c\u2500"
-            prefix = f'<span style="display:inline-block; width:28px;">{connector}&nbsp;</span>'
             rows.append(
                 {
                     "type": "variation",
-                    "lines": sibling.render_outline(targets, depth=0, prefix=prefix),
+                    "lines": sibling.render_outline(
+                        targets, depth=0, prefix=_connector_span(is_last)
+                    ),
                 }
             )
 
