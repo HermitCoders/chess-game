@@ -6,9 +6,9 @@ import chess
 from piece import PieceItem
 from promotion_dialog import PromotionDialog
 
-
-from PyQt6.QtGui import QPainter, QPen, QColor
-from PyQt6.QtCore import QRectF
+from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF, QPainterPath, QPainterPathStroker
+from PyQt6.QtCore import QRectF, QPointF
+import math
 
 class MoveHintWidget(QWidget):
     def __init__(self, parent, is_capture, size):
@@ -32,6 +32,92 @@ class MoveHintWidget(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color)
             painter.drawEllipse(self.rect())
+
+class BestMoveArrow(QWidget):
+    RANK_STYLES = [
+        (46, 139, 87, 130, 16, 42),   # primary: deep emerald, thick, full-size head
+        (46, 139, 87, 75, 10, 30),    # 2nd: lighter, thinner
+        (46, 139, 87, 40, 6, 22),     # 3rd: lightest, thinnest
+    ]
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.arrows = []  # list of (from_point, to_point)
+
+    def set_arrows(self, arrows):
+        self.arrows = arrows
+        self.update()
+
+    def clear_arrow(self):
+        if self.arrows:
+            self.arrows = []
+            self.update()
+
+    def paintEvent(self, event):
+        if not self.arrows:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw weaker/lighter lines first, primary suggestion last, so
+        # the primary arrow always sits visually on top.
+        for (p1, p2), style in reversed(list(zip(self.arrows, self.RANK_STYLES))):
+            r, g, b, alpha, pen_width, arrow_len = style
+            color = QColor(r, g, b, alpha)
+            arrow_half_width = math.pi / 5
+
+            # Knight moves (delta of 1 and 2 in perpendicular
+            # directions) are drawn as a bent L-shape, matching the
+            # lichess/chess.com convention, rather than a straight
+            # diagonal line that doesn't reflect how the piece
+            # actually travels.
+            dx = round((p2.x() - p1.x()) / self.parent().SQUARE_SIZE)
+            dy = round((p2.y() - p1.y()) / self.parent().SQUARE_SIZE)
+            is_knight_move = {abs(dx), abs(dy)} == {1, 2}
+
+            path_points = [p1]
+            if is_knight_move:
+                bend = QPointF(p1.x(), p2.y()) if abs(dy) > abs(dx) else QPointF(p2.x(), p1.y())
+                path_points.append(bend)
+            path_points.append(p2)
+
+            final_p1 = path_points[-2]
+            angle = math.atan2(p2.y() - final_p1.y(), p2.x() - final_p1.x())
+            shaft_end = QPointF(
+                p2.x() - (arrow_len * 0.5) * math.cos(angle),
+                p2.y() - (arrow_len * 0.5) * math.sin(angle),
+            )
+
+            line_path = QPainterPath()
+            line_path.moveTo(path_points[0])
+            for point in path_points[1:-1]:
+                line_path.lineTo(point)
+            line_path.lineTo(shaft_end)
+
+            stroker = QPainterPathStroker()
+            stroker.setWidth(pen_width)
+            stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
+            stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            shaft_path = stroker.createStroke(line_path)
+
+            tip = p2
+            base1 = QPointF(
+                p2.x() - arrow_len * math.cos(angle - arrow_half_width),
+                p2.y() - arrow_len * math.sin(angle - arrow_half_width),
+            )
+            base2 = QPointF(
+                p2.x() - arrow_len * math.cos(angle + arrow_half_width),
+                p2.y() - arrow_len * math.sin(angle + arrow_half_width),
+            )
+            head_path = QPainterPath()
+            head_path.addPolygon(QPolygonF([tip, base1, base2]))
+            head_path.closeSubpath()
+
+            combined = shaft_path.united(head_path)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawPath(combined)
 
 class ChessBoard(QFrame):
     def __init__(self, parent):
@@ -68,6 +154,11 @@ class ChessBoard(QFrame):
 
         self.draw_board()
         self.draw_pieces()
+
+        self.best_move_arrow_widget = BestMoveArrow(self)
+        self.best_move_arrow_widget.setGeometry(0, 0, self.SQUARE_SIZE * 8, self.SQUARE_SIZE * 8)
+        self.best_move_arrow_widget.raise_()
+
         self.setLayout(self.layout)
 
     def draw_board(self):
@@ -147,6 +238,7 @@ class ChessBoard(QFrame):
                     self.layout.addWidget(piece_label, row, col)
                     self.pieces_items[sqr_index] = piece_label
 
+        self.best_move_arrow_widget.raise_()
         self._update_check_highlight(next_board)
 
     def _update_check_highlight(self, board):
@@ -244,6 +336,25 @@ class ChessBoard(QFrame):
         hint.move((self.SQUARE_SIZE - size) // 2, (self.SQUARE_SIZE - size) // 2)
         hint.show()
         self.move_hint_widgets.append(hint)
+    
+    def square_center(self, square_index):
+        col, row = self.get_square_coords(square_index)
+        x = col * self.SQUARE_SIZE + self.SQUARE_SIZE / 2
+        y = row * self.SQUARE_SIZE + self.SQUARE_SIZE / 2
+        return QPointF(x, y)
+
+    def show_best_move_arrows(self, moves):
+        if not moves:
+            self.best_move_arrow_widget.clear_arrow()
+            return
+        arrows = [
+            (self.square_center(move.from_square), self.square_center(move.to_square))
+            for move in moves
+        ]
+        self.best_move_arrow_widget.set_arrows(arrows)
+
+    def clear_best_move_arrow(self):
+        self.best_move_arrow_widget.clear_arrow()
 
     def move_piece(self, square_index):
         if (
@@ -284,4 +395,5 @@ class ChessBoard(QFrame):
         self.pieces_items = {}
         self.draw_board()
         self.draw_pieces()
+        self.best_move_arrow_widget.raise_()
         self.update()
