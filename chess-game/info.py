@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect,
     QProgressBar,
 )
-from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor, QFontMetrics
+from PyQt6.QtGui import QColor, QPainter, QFont, QTextCursor, QFontMetrics, QBrush
 from PyQt6.QtCore import Qt, QRect, QObject, QEvent, QTimer, pyqtSignal
 import chess
 import chess.engine
@@ -98,7 +98,34 @@ class MovesRecord(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
+    def _find_anchor_range(self, anchor_id):
+        """Find the full [start, end) character range covered by a
+        given anchor's rendered text. Qt's isAnchor()/anchorNames()
+        only reliably tag the first character of a link's text run,
+        but anchorHref() persists correctly across the whole run --
+        so we match on href, and span every consecutive fragment that
+        shares it, not just the first one found."""
+        doc = self.text_edit.document()
+        start = None
+        end = None
+        block = doc.begin()
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                fmt = frag.charFormat()
+                if fmt.anchorHref() == anchor_id:
+                    if start is None:
+                        start = frag.position()
+                    end = frag.position() + frag.length()
+                it += 1
+            block = block.next()
+        if start is None:
+            return None
+        return start, end
+
     def render_from_tree(self, move_tree):
+        self.setUpdatesEnabled(False)
         self._targets = {}
         rows = move_tree.get_root().render_table(self._targets)
 
@@ -157,38 +184,73 @@ class MovesRecord(QWidget):
 
         scrollbar.setValue(previous_scroll)
         self._scroll_to_active()
+        self.setUpdatesEnabled(True)
+
+    def update_active(self, move_tree):
+        """Lightweight alternative to render_from_tree() for pure
+        navigation (arrow keys, jump_to_move) -- the tree's actual
+        content hasn't changed, only which move is "active", so we
+        can just restyle the two affected words directly instead of
+        rebuilding the entire document from scratch."""
+        old_anchor = self._active_anchor
+
+        new_anchor = None
+        if move_tree._current_move >= 0:
+            for anchor_id, (node, idx) in self._targets.items():
+                if node is move_tree and idx == move_tree._current_move:
+                    new_anchor = anchor_id
+                    break
+
+        if new_anchor == old_anchor:
+            return
+
+        self._active_anchor = new_anchor
+
+        for anchor_id in (old_anchor, new_anchor):
+            if anchor_id is None:
+                continue
+            found = self._find_anchor_range(anchor_id)
+            if found is None:
+                continue
+            start, end = found
+            cursor = QTextCursor(self.text_edit.document())
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            fmt = cursor.charFormat()
+            if anchor_id == self._active_anchor:
+                fmt.setBackground(QColor("#0f6e56"))
+                fmt.setForeground(QColor("#eafff6"))
+            else:
+                fmt.setBackground(QBrush(Qt.BrushStyle.NoBrush))
+                fmt.setForeground(QColor("#f6f6f6"))
+            cursor.setCharFormat(fmt)
+
+        self._scroll_to_active()
 
     def _scroll_to_active(self):
         if self._active_anchor is None:
             self.text_edit.verticalScrollBar().setValue(0)
             return
 
-        doc = self.text_edit.document()
-        block = doc.begin()
-        while block.isValid():
-            it = block.begin()
-            while not it.atEnd():
-                frag = it.fragment()
-                fmt = frag.charFormat()
-                if fmt.isAnchor() and self._active_anchor in fmt.anchorNames():
-                    cursor = QTextCursor(doc)
-                    cursor.setPosition(frag.position())
-                    # Trust Qt's own visibility check rather than
-                    # reimplementing it -- ensureCursorVisible() is a
-                    # no-op if the cursor is already visible, so this
-                    # is safe to call unconditionally.
-                    self.text_edit.setTextCursor(cursor)
-                    self.text_edit.ensureCursorVisible()
+        found = self._find_anchor_range(self._active_anchor)
+        if found is None:
+            return
+        start, _ = found
 
-                    # ensureCursorVisible() only scrolls the minimum
-                    # needed, landing the active line right at the
-                    # viewport's edge -- nudge a bit further so it
-                    # settles in with some breathing room instead.
-                    scrollbar = self.text_edit.verticalScrollBar()
-                    scrollbar.setValue(min(scrollbar.value() + 24, scrollbar.maximum()))
-                    return
-                it += 1
-            block = block.next()
+        cursor = QTextCursor(self.text_edit.document())
+        cursor.setPosition(start)
+
+        scrollbar = self.text_edit.verticalScrollBar()
+        before = scrollbar.value()
+
+        self.text_edit.setTextCursor(cursor)
+        self.text_edit.ensureCursorVisible()
+
+        after = scrollbar.value()
+        if after > before:
+            scrollbar.setValue(min(after + 6, scrollbar.maximum()))
+        elif after < before:
+            scrollbar.setValue(max(after - 6, 0))
     
     def _style_for(self, anchor_id):
         styles = ["color:#f6f6f6", "text-decoration:none", "padding:1px 3px", "border-radius:3px"]
