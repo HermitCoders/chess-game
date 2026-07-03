@@ -224,14 +224,28 @@ class GameFrame(QFrame):
         self.white_name = game.headers.get("White", "White")
         self.black_name = game.headers.get("Black", "Black")
 
-        self.board.board = game.board()
-        self.move_tree = MoveTree(self.board.board)
+        self.move_tree = MoveTree(game.board())
         self._import_variations(game, self.move_tree)
 
         if self.move_tree._main_line:
             self.move_tree._current_move = len(self.move_tree._main_line) - 1
 
-        self.sync_board_to_tree()
+        # Explicitly reset the board's visual state before drawing the
+        # imported position, rather than relying on whatever happened
+        # to be displayed beforehand -- importing is a full state
+        # replacement, not an incremental change, so it shouldn't
+        # depend on correctly diffing against prior state at all.
+        for old_piece in list(self.board.pieces_items.values()):
+            self.board.layout.removeWidget(old_piece)
+            old_piece.deleteLater()
+            old_piece.setParent(None)
+        self.board.pieces_items = {}
+
+        self.board.previous_board = chess.Board(None)
+        self.board.board = self.move_tree.get_board()
+        self.board.uncheck_all()
+        self.board.update_pieces(self.board.board)
+
         self._on_position_changed()
     
     def new_game(self):
@@ -270,6 +284,19 @@ class GameFrame(QFrame):
         self._last_top_moves = []
         self.board.clear_best_move_arrow()
         self.moves_record.render_from_tree(self.move_tree)
+        self.request_eval()
+        self._update_captured_trays()
+
+    def _on_navigated(self):
+        """Call after pure navigation (arrow keys, jump_to_move) --
+        the tree's content hasn't changed, only which move is
+        active, so this uses the lightweight update_active() instead
+        of a full moves-panel rebuild, and clears any leftover piece
+        selection/move-hints and the best-move arrow from before the
+        navigation happened."""
+        self.board.unhighlight_all()
+        self.board.clear_best_move_arrow()
+        self.moves_record.update_active(self.move_tree)
         self.request_eval()
         self._update_captured_trays()
 
@@ -313,7 +340,7 @@ class GameFrame(QFrame):
         node.select_path_to_root()
         self.move_tree = node
         self.sync_board_to_tree()
-        self._on_position_changed()
+        self._on_navigated()
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -388,14 +415,14 @@ class GameFrame(QFrame):
                         if parent:
                             self.move_tree = parent
 
-                    self._on_position_changed()
+                    self._on_navigated()
                 else:
                     logger.debug("End of variation, moving up to parent line")
                     mama = self.move_tree.move_up()
                     if mama:
                         self.move_tree = mama
                         self.sync_board_to_tree()
-                        self._on_position_changed()
+                        self._on_navigated()
             else:
                 logger.debug("Move stack is empty, nothing to go back to")
 
@@ -408,7 +435,7 @@ class GameFrame(QFrame):
                 self.board.board.push(popped_move)
                 self.board.move_made = True
                 self.board.update_pieces(self.board.board)
-                self._on_position_changed()
+                self._on_navigated()
         
         elif event.key() == Qt.Key.Key_Down:
             child = self.move_tree.move_down()
@@ -416,14 +443,14 @@ class GameFrame(QFrame):
                 child._current_move = 0
                 self.move_tree = child
                 self.sync_board_to_tree()
-                self._on_position_changed()
+                self._on_navigated()
         
         elif event.key() == Qt.Key.Key_Up:
             mama = self.move_tree.move_up()
             if mama:
                 self.move_tree = mama 
                 self.sync_board_to_tree()
-                self._on_position_changed()
+                self._on_navigated()
                 
         elif event.key() == Qt.Key.Key_E:
             self.request_eval()
