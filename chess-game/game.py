@@ -77,17 +77,24 @@ class GameFrame(QFrame):
         self._last_top_moves = []
 
         sounds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "sounds")
-        self.move_sound = QSoundEffect()
-        self.move_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "Move.wav")))
-        self.move_sound.setVolume(0.5)
 
-        self.capture_sound = QSoundEffect()
-        self.capture_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "Capture.wav")))
-        self.capture_sound.setVolume(0.5)
+        def make_sound_pool(filename, pool_size=8):
+            pool = []
+            for _ in range(pool_size):
+                effect = QSoundEffect()
+                effect.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, filename)))
+                effect.setVolume(0.5)
+                pool.append(effect)
+            return pool
 
+        self._move_sound_pool = make_sound_pool("Move.wav")
+        self._capture_sound_pool = make_sound_pool("Capture.wav")
         self.notify_sound = QSoundEffect()
         self.notify_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "GenericNotify.wav")))
         self.notify_sound.setVolume(0.5)
+
+        self._move_sound_index = 0
+        self._capture_sound_index = 0
 
         # Create a thread for the engine
         self.chess_engine = ChessEngine()
@@ -148,6 +155,11 @@ class GameFrame(QFrame):
         main_widget.setLayout(main_layout)
         self.setLayout(main_layout)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def _play_pooled_sound(self, pool, index_attr):
+        index = getattr(self, index_attr)
+        pool[index].play()
+        setattr(self, index_attr, (index + 1) % len(pool))
     
     def request_eval(self):
         if self._engine_busy:
@@ -283,11 +295,12 @@ class GameFrame(QFrame):
         panel and engine evaluation in sync with the new position."""
         self._last_top_moves = []
         self.board.clear_best_move_arrow()
+        self.board.show_last_move(self.move_tree.get_last_move_played())
         self.moves_record.render_from_tree(self.move_tree)
         self.request_eval()
         self._update_captured_trays()
 
-    def _on_navigated(self):
+    def _on_navigated(self, piece_count_before=None):
         """Call after pure navigation (arrow keys, jump_to_move) --
         the tree's content hasn't changed, only which move is
         active, so this uses the lightweight update_active() instead
@@ -296,9 +309,36 @@ class GameFrame(QFrame):
         navigation happened."""
         self.board.unhighlight_all()
         self.board.clear_best_move_arrow()
+        self.board.show_last_move(self.move_tree.get_last_move_played())
+        if piece_count_before is not None:
+            self._play_move_sound(piece_count_before)
         self.moves_record.update_active(self.move_tree)
         self.request_eval()
         self._update_captured_trays()
+    
+    def _go_to_node(self, node, play_sound=True):
+        """Shared by every navigation key and jump_to_move: point
+        move_tree at the given node, rebuild the board to match it,
+        and run the shared post-navigation steps."""
+        piece_count_before = len(self.board.board.piece_map()) if play_sound else None
+        self.move_tree = node
+        self.sync_board_to_tree()
+        self._on_navigated(piece_count_before)
+
+    def _play_move_sound(self, piece_count_before):
+        """Play move or capture sound based on whether the total
+        number of pieces on the board changed, rather than trying to
+        identify a single 'last move' -- that concept breaks down when
+        navigating between different lines (e.g. moving up out of a
+        variant), where there may be no single unambiguous move
+        connecting the old and new positions at all. A capture, in
+        either direction (playing one, or undoing one), always changes
+        the total piece count; a quiet move never does."""
+        piece_count_after = len(self.board.board.piece_map())
+        if piece_count_after != piece_count_before:
+            self._play_pooled_sound(self._capture_sound_pool, "_capture_sound_index")
+        else:
+            self._play_pooled_sound(self._move_sound_pool, "_move_sound_index")
 
     def _update_captured_trays(self):
         missing_white, missing_black = compute_captured(self.board.board)
@@ -338,9 +378,7 @@ class GameFrame(QFrame):
     def jump_to_move(self, node, move_index):
         node._current_move = move_index
         node.select_path_to_root()
-        self.move_tree = node
-        self.sync_board_to_tree()
-        self._on_navigated()
+        self._go_to_node(node)
 
     def mousePressEvent(self, event: QMouseEvent):
         global_pos = self.mapToGlobal(event.pos())
@@ -365,9 +403,9 @@ class GameFrame(QFrame):
                 if self.board.move_made:
                     the_move = self.board.board.peek()
                     if was_capture:
-                        self.capture_sound.play()
+                        self._play_pooled_sound(self._capture_sound_pool, "_capture_sound_index")
                     else:
-                        self.move_sound.play()
+                        self._play_pooled_sound(self._move_sound_pool, "_move_sound_index")
                     if self.move_tree.get_next_move() is None:
                         self.move_tree.add_main(the_move)
                     elif self.move_tree.get_next_move() == the_move:
@@ -405,52 +443,35 @@ class GameFrame(QFrame):
         if event.key() == Qt.Key.Key_Left:
             if self.board.board.move_stack:
                 if self.move_tree.move_backward() is not None:
-                    self.board.uncheck_all()
-                    self.board.previous_board = self.board.board.copy()
-                    self.board.board.pop()
-                    self.board.update_pieces(self.board.board)
-
-                    if self.move_tree._current_move == -1:
-                        parent = self.move_tree.move_up()
+                    target = self.move_tree
+                    if target._current_move == -1:
+                        parent = target.move_up()
                         if parent:
-                            self.move_tree = parent
-
-                    self._on_navigated()
+                            target = parent
+                    self._go_to_node(target, play_sound=False)
                 else:
                     logger.debug("End of variation, moving up to parent line")
                     mama = self.move_tree.move_up()
                     if mama:
-                        self.move_tree = mama
-                        self.sync_board_to_tree()
-                        self._on_navigated()
+                        self._go_to_node(mama, play_sound=False)
             else:
                 logger.debug("Move stack is empty, nothing to go back to")
 
 
         elif event.key() == Qt.Key.Key_Right:
-            popped_move = self.move_tree.move_forward()
-            if popped_move:
-                self.board.uncheck_all()
-                self.board.previous_board = self.board.board.copy()
-                self.board.board.push(popped_move)
-                self.board.move_made = True
-                self.board.update_pieces(self.board.board)
-                self._on_navigated()
+            if self.move_tree.move_forward() is not None:
+                self._go_to_node(self.move_tree)
         
         elif event.key() == Qt.Key.Key_Down:
             child = self.move_tree.move_down()
             if child:
                 child._current_move = 0
-                self.move_tree = child
-                self.sync_board_to_tree()
-                self._on_navigated()
+                self._go_to_node(child)
         
         elif event.key() == Qt.Key.Key_Up:
             mama = self.move_tree.move_up()
             if mama:
-                self.move_tree = mama 
-                self.sync_board_to_tree()
-                self._on_navigated()
+                self._go_to_node(mama, play_sound=False)
                 
         elif event.key() == Qt.Key.Key_E:
             self.request_eval()

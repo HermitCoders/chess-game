@@ -134,10 +134,12 @@ class ChessBoard(QFrame):
         # self.square_colors = {"light": "#d9c9a8", "dark": "#6f6558"}
         self.check_colors = {"light": "#e2514c", "dark": "#d74840"}
         self.highlight_colors = {"light": "#00e6b8", "dark": "#00cca3"}
-        self.selected_colors = {"light": "#bcd4e6", "dark": "#8fb8d1"}
+        self.selected_colors = {"light": "#b0c8dd", "dark": "#85a8c4"}
+        self.last_move_colors = {"light": "#b0c8dd", "dark": "#85a8c4"}
 
         self.highlighted_squares = set()
         self.selected_squares = set()
+        self.last_move_squares = set()
         self.checked_squares = set()
         self.previous_sq_idx = None
         self.possible_moves = None
@@ -248,6 +250,15 @@ class ChessBoard(QFrame):
             if king_square is not None:
                 self.set_square_style(king_square, "check")
                 self.checked_squares.add(king_square)
+    
+    def show_last_move(self, move):
+        for sqr_index in self.last_move_squares:
+            self.set_square_style(sqr_index)
+        self.last_move_squares = set()
+
+        if move is not None:
+            self.set_square_style(move.from_square, "last_move")
+            self.set_square_style(move.to_square, "last_move")
 
     def get_square_coords(self, square_index):
         col = chess.square_file(square_index)
@@ -264,7 +275,10 @@ class ChessBoard(QFrame):
     def set_square_style(self, square_index, square_style=None):
         square = self.findChild(QWidget, chess.SQUARE_NAMES[square_index])
         color = self.get_square_color(square_index)
-        if square_style == "selected":
+        if square_style == "last_move":
+            style = f"background-color: {self.last_move_colors[color]}"
+            self.last_move_squares.add(square_index)
+        elif square_style == "selected":
             style = f"background-color: {self.selected_colors[color]}"
             self.selected_squares.add(square_index)
         elif square_style == "highlight":

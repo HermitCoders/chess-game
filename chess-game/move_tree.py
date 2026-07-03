@@ -64,6 +64,10 @@ class MoveTreeABC(ABC):
     @abstractmethod
     def get_current_move(self) -> chess.Move:
         pass
+    
+    @abstractmethod
+    def get_last_move_played(self) -> chess.Move:
+        pass
 
     @abstractmethod
     def get_variant(self) -> MoveTreeABC:
@@ -168,6 +172,16 @@ class MoveTree(MoveTreeABC):
         return move
 
     def get_current_move(self) -> chess.Move:
+        return self._main_line[self._current_move]
+    
+    def get_last_move_played(self) -> chess.Move:
+        """Like get_current_move(), but returns None instead of
+        raising if this node's pointer is at -1 (before any of its
+        own moves) -- used for the last-move highlight, which should
+        simply show nothing rather than error at the very start of a
+        line."""
+        if self._current_move < 0:
+            return None
         return self._main_line[self._current_move]
 
     def get_previous_move(self) -> chess.Move:
