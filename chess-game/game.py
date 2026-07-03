@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
     QProgressBar,
 )
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QThread, QUrl, pyqtSignal
+from PyQt6.QtMultimedia import QSoundEffect
 import chess
 import chess.engine
 import chess.pgn
@@ -74,6 +75,19 @@ class GameFrame(QFrame):
         self._update_captured_trays()
 
         self._last_top_moves = []
+
+        sounds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "sounds")
+        self.move_sound = QSoundEffect()
+        self.move_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "Move.wav")))
+        self.move_sound.setVolume(0.5)
+
+        self.capture_sound = QSoundEffect()
+        self.capture_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "Capture.wav")))
+        self.capture_sound.setVolume(0.5)
+
+        self.notify_sound = QSoundEffect()
+        self.notify_sound.setSource(QUrl.fromLocalFile(os.path.join(sounds_dir, "GenericNotify.wav")))
+        self.notify_sound.setVolume(0.5)
 
         # Create a thread for the engine
         self.chess_engine = ChessEngine()
@@ -280,6 +294,8 @@ class GameFrame(QFrame):
             tray.update_captured(missing, color, lead)
     
     def _check_game_end(self, board):
+        if board.is_checkmate() or board.is_stalemate() or board.is_insufficient_material() or board.can_claim_threefold_repetition() or board.is_seventyfive_moves():
+            self.notify_sound.play()
         if board.is_checkmate():
             winner = "White" if not board.turn else "Black"
             QMessageBox.information(self, "Checkmate", f"Checkmate -- {winner} wins!")
@@ -317,9 +333,14 @@ class GameFrame(QFrame):
                 self.board.unhighlight_all()
                 self.board.draw_possible_moves(square_index)
                 
+                was_capture = self.board.board.piece_at(square_index) is not None
                 self.board.move_piece(square_index)
                 if self.board.move_made:
                     the_move = self.board.board.peek()
+                    if was_capture:
+                        self.capture_sound.play()
+                    else:
+                        self.move_sound.play()
                     if self.move_tree.get_next_move() is None:
                         self.move_tree.add_main(the_move)
                     elif self.move_tree.get_next_move() == the_move:
