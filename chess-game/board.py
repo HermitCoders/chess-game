@@ -409,5 +409,18 @@ class ChessBoard(QFrame):
         self.pieces_items = {}
         self.draw_board()
         self.draw_pieces()
+        self._reapply_persistent_highlights()
         self.best_move_arrow_widget.raise_()
         self.update()
+
+    def _reapply_persistent_highlights(self):
+        """draw_board() resets every square widget to its default
+        style, silently dropping any last-move/check highlighting
+        that was active before a full rebuild (e.g. flipping the
+        board). Re-paint them here using the square indices we were
+        already tracking -- they're absolute chess squares, not
+        screen positions, so they're still valid after a flip."""
+        for sqr_index in list(self.last_move_squares):
+            self.set_square_style(sqr_index, "last_move")
+        for sqr_index in list(self.checked_squares):
+            self.set_square_style(sqr_index, "check")
