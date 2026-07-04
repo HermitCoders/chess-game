@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QApplication, QSizePol
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 import chess
+from functools import lru_cache
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
@@ -30,10 +31,36 @@ def compute_captured(board):
 def material_value(piece_types):
     return sum(PIECE_VALUES[p] for p in piece_types)
 
+@lru_cache(maxsize=None)
+def _load_piece_pixmap(color, piece_type):
+    """Load and scale a captured-piece icon once, then cache it.
+    update_captured() used to re-read the PNG from disk and re-run
+    SmoothTransformation scaling for every icon on every single
+    navigation step, even when nothing about the captured pieces had
+    changed -- in a long game with several captures, that's real
+    per-keystroke cost that grows as more pieces get captured."""
+    pixmap = QPixmap(
+        os.path.join(
+            ASSETS_DIR,
+            "pieces",
+            "{}{}.png".format("w" if color else "b", chess.piece_symbol(piece_type)),
+        )
+    )
+    device_ratio = QApplication.primaryScreen().devicePixelRatio()
+    target_size = int(24 * device_ratio)
+    scaled = pixmap.scaled(
+        target_size, target_size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    scaled.setDevicePixelRatio(device_ratio)
+    return scaled
+
 
 class CapturedPiecesTray(QWidget):
     def __init__(self):
         super().__init__()
+        self._last_state = None
         self.setFixedHeight(32)
         self.setStyleSheet("background-color: transparent;")
 
@@ -64,37 +91,28 @@ class CapturedPiecesTray(QWidget):
         self.name_label.adjustSize()
 
     def update_captured(self, captured_types, piece_color, material_lead):
+        sorted_types = tuple(sorted(captured_types, key=DISPLAY_ORDER.index))
+        state = (sorted_types, piece_color, material_lead)
+        if state == self._last_state:
+            # Nothing about this tray's contents actually changed --
+            # skip tearing down and rebuilding every icon widget, which
+            # is the expensive part and was happening on every single
+            # navigation keystroke regardless of whether it was needed.
+            return
+        self._last_state = state
+
         while self.icon_layout.count():
             item = self.icon_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-        sorted_types = sorted(captured_types, key=DISPLAY_ORDER.index)
-
         previous_type = None
         for piece_type in sorted_types:
             icon = QLabel()
             icon.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             icon.setStyleSheet("background: transparent;")
-            pixmap = QPixmap(
-                os.path.join(
-                    ASSETS_DIR,
-                    "pieces",
-                    "{}{}.png".format(
-                        "w" if piece_color else "b", chess.piece_symbol(piece_type)
-                    ),
-                )
-            )
-            device_ratio = QApplication.primaryScreen().devicePixelRatio()
-            target_size = int(24 * device_ratio)
-            scaled = pixmap.scaled(
-                target_size, target_size,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            scaled.setDevicePixelRatio(device_ratio)
-            icon.setPixmap(scaled)
+            icon.setPixmap(_load_piece_pixmap(piece_color, piece_type))
 
             if previous_type is not None:
                 gap = -14 if piece_type == previous_type else 2
