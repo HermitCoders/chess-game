@@ -33,9 +33,7 @@ class GameFrame(QFrame):
 
     def __init__(self, parent):
         super().__init__(parent)
-
-        self.parent = parent
-
+        
         self.setStyleSheet("background-color: #262626")
 
         self.board = ChessBoard(self)
@@ -104,9 +102,9 @@ class GameFrame(QFrame):
         self.request_evaluation.connect(self.chess_engine.evaluate)
 
         self.chess_engine.evaluation_result.connect(self.handle_evaluation_result)
+        self.chess_engine.evaluation_failed.connect(self.handle_evaluation_failed)
         self._engine_busy = False
         self._eval_pending = False
-        self.thread.finished.connect(self.thread.quit)
 
         self.thinking_bar = QProgressBar()
         self.thinking_bar.setRange(0, 0)  # indeterminate mode
@@ -161,17 +159,32 @@ class GameFrame(QFrame):
         pool[index].play()
         setattr(self, index_attr, (index + 1) % len(pool))
     
+    def _thinking_bar_style(self, active):
+        chunk_color = "#5dcaa5" if active else "#262626"
+        return (
+            "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
+            f"QProgressBar::chunk {{background-color: {chunk_color};}}"
+        )
+
     def request_eval(self):
         if self._engine_busy:
             self._eval_pending = True
             return
         self._engine_busy = True
         self.engine_lines.set_thinking(True)
-        self.thinking_bar.setStyleSheet(
-            "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
-            "QProgressBar::chunk {background-color: #5dcaa5;}"
-        )
+        self.thinking_bar.setStyleSheet(self._thinking_bar_style(active=True))
         self.request_evaluation.emit(self.board.board.copy())
+
+    def _finish_engine_request(self):
+        """Shared cleanup for both a completed and a failed evaluation --
+        always clears the busy flag and thinking indicator, and fires
+        off a pending request if one queued up while this one ran."""
+        self._engine_busy = False
+        self.engine_lines.set_thinking(False)
+        self.thinking_bar.setStyleSheet(self._thinking_bar_style(active=False))
+        if self._eval_pending:
+            self._eval_pending = False
+            self.request_eval()
 
     def handle_evaluation_result(self, board, result):
         try:
@@ -190,15 +203,15 @@ class GameFrame(QFrame):
                     self.engine_lines.table_widget.clearContents()
                     self.board.clear_best_move_arrow()
         finally:
-            self._engine_busy = False
-            self.engine_lines.set_thinking(False)
-            self.thinking_bar.setStyleSheet(
-                "QProgressBar {background-color: #262626; border: none; margin: 0px; padding: 0px;} "
-                "QProgressBar::chunk {background-color: #262626;}"
-            )
-            if self._eval_pending:
-                self._eval_pending = False
-                self.request_eval()
+            self._finish_engine_request()
+
+    def handle_evaluation_failed(self, board):
+        """The engine errored out or died mid-analysis. There's no
+        result to show, but the busy/thinking state still needs to be
+        cleared -- otherwise every future request_eval() call just
+        queues up as pending and nothing ever evaluates again."""
+        logger.error("Engine evaluation failed for position %s", board.fen())
+        self._finish_engine_request()
 
     def _import_variations(self, pgn_node, tree_node):
         """Recursively walk a python-chess GameNode tree and rebuild it
