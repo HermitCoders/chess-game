@@ -72,6 +72,7 @@ class MovesRecord(QWidget):
         self.on_move_clicked = None
         self._targets = {}
         self._active_anchor = None
+        self._anchor_ranges = {}
 
         self.setStyleSheet("background-color: #363636")
 
@@ -98,31 +99,35 @@ class MovesRecord(QWidget):
         vbox_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(vbox_layout)
 
-    def _find_anchor_range(self, anchor_id):
-        """Find the full [start, end) character range covered by a
-        given anchor's rendered text. Qt's isAnchor()/anchorNames()
-        only reliably tag the first character of a link's text run,
-        but anchorHref() persists correctly across the whole run --
-        so we match on href, and span every consecutive fragment that
-        shares it, not just the first one found."""
+    def _build_anchor_index(self):
+        """Scan the document once and cache every anchor's [start, end)
+        character range, so update_active()/scroll -- called on every
+        navigation keystroke -- can do an O(1) lookup instead of
+        re-scanning the whole document each time. Safe to cache like
+        this because character positions only change when setHtml()
+        replaces the text (i.e. the next render_from_tree() call);
+        update_active() only edits character *formatting*, never the
+        text itself, so positions stay valid in between."""
+        self._anchor_ranges = {}
         doc = self.text_edit.document()
-        start = None
-        end = None
         block = doc.begin()
         while block.isValid():
             it = block.begin()
             while not it.atEnd():
                 frag = it.fragment()
-                fmt = frag.charFormat()
-                if fmt.anchorHref() == anchor_id:
-                    if start is None:
-                        start = frag.position()
-                    end = frag.position() + frag.length()
+                anchor_id = frag.charFormat().anchorHref()
+                if anchor_id:
+                    start = frag.position()
+                    end = start + frag.length()
+                    prev_start, prev_end = self._anchor_ranges.get(anchor_id, (start, end))
+                    self._anchor_ranges[anchor_id] = (min(start, prev_start), max(end, prev_end))
                 it += 1
             block = block.next()
-        if start is None:
-            return None
-        return start, end
+
+    def _find_anchor_range(self, anchor_id):
+        """O(1) lookup against the index built by _build_anchor_index().
+        See that method for why caching positions here is safe."""
+        return self._anchor_ranges.get(anchor_id)
 
     def render_from_tree(self, move_tree):
         self.setUpdatesEnabled(False)
@@ -181,6 +186,7 @@ class MovesRecord(QWidget):
 
         self.text_edit.setHtml("".join(html_parts))
         self.text_edit.document().setTextWidth(self.text_edit.viewport().width())
+        self._build_anchor_index()
 
         scrollbar.setValue(previous_scroll)
         self._scroll_to_active()
@@ -485,6 +491,7 @@ class EngineLines(QWidget):
 
 class ChessEngine(QObject):
     evaluation_result = pyqtSignal(object, list)
+    evaluation_failed = pyqtSignal(object)
 
     def __init__(self, engine_path: str = None):
         super().__init__()
@@ -499,8 +506,10 @@ class ChessEngine(QObject):
             )
         except chess.engine.EngineTerminatedError:
             logger.error("Stockfish process terminated unexpectedly during analysis")
+            self.evaluation_failed.emit(board)
             return
         except chess.engine.EngineError as e:
             logger.error("Stockfish engine error during analysis: %s", e)
+            self.evaluation_failed.emit(board)
             return
         self.evaluation_result.emit(board, info)
